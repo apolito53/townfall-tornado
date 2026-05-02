@@ -1,7 +1,7 @@
 export const MAX_TORNADO_CATEGORY = 5;
 
-const CATEGORY_TWO_MASS = 32;
-const CATEGORY_MASS_CURVE = 2.35;
+const CATEGORY_TWO_MASS = 55;
+const CATEGORY_MASS_CURVE = 3.55;
 
 export function getCategoryMassRequirement(category) {
   if (category <= 1) {

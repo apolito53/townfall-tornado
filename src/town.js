@@ -5,6 +5,8 @@ const ROAD_COORDS = [-4, 4];
 const TOWN_BOUNDARY = 50;
 const CHUNK_SIZE = 72;
 const GENERATION_MARGIN = 26;
+const INITIAL_CHUNK_RADIUS = 2;
+const EDGE_GENERATION_RADIUS = 2;
 
 const MATERIALS = {
   grass: new THREE.MeshStandardMaterial({ color: 0x5c8f5c, roughness: 0.95 }),
@@ -786,10 +788,14 @@ export class Town {
     this.groundScars = [];
     this.groundScarTimer = 0;
     this.generatedChunks = new Set([chunkKey(0, 0)]);
-    this.boundarySize = TOWN_BOUNDARY + Math.min(4, levelIndex) * 8;
     this.createTerrain();
     this.group.add(this.groundDamageGroup);
     this.populateTown();
+    this.generateChunkNeighborhood(0, 0, INITIAL_CHUNK_RADIUS);
+    this.boundarySize = Math.max(
+      TOWN_BOUNDARY + Math.min(4, levelIndex) * 8,
+      INITIAL_CHUNK_RADIUS * CHUNK_SIZE + CHUNK_SIZE * 0.62,
+    );
   }
 
   restart() {
@@ -826,8 +832,18 @@ export class Town {
     const centerChunkX = Math.round(position.x / CHUNK_SIZE);
     const centerChunkZ = Math.round(position.z / CHUNK_SIZE);
 
-    for (let dz = -1; dz <= 1; dz += 1) {
-      for (let dx = -1; dx <= 1; dx += 1) {
+    this.generateChunkNeighborhood(centerChunkX, centerChunkZ, EDGE_GENERATION_RADIUS);
+
+    const furthestChunk = Math.max(
+      Math.abs(centerChunkX) + EDGE_GENERATION_RADIUS,
+      Math.abs(centerChunkZ) + EDGE_GENERATION_RADIUS,
+    );
+    this.boundarySize = Math.max(this.boundarySize, furthestChunk * CHUNK_SIZE + CHUNK_SIZE * 0.62);
+  }
+
+  generateChunkNeighborhood(centerChunkX, centerChunkZ, radius) {
+    for (let dz = -radius; dz <= radius; dz += 1) {
+      for (let dx = -radius; dx <= radius; dx += 1) {
         const chunkX = centerChunkX + dx;
         const chunkZ = centerChunkZ + dz;
         const key = chunkKey(chunkX, chunkZ);
@@ -840,9 +856,6 @@ export class Town {
         this.createProceduralChunk(chunkX, chunkZ);
       }
     }
-
-    const furthestChunk = Math.max(Math.abs(centerChunkX) + 1, Math.abs(centerChunkZ) + 1);
-    this.boundarySize = Math.max(this.boundarySize, furthestChunk * CHUNK_SIZE + CHUNK_SIZE * 0.62);
   }
 
   getDestroyedRatio() {
