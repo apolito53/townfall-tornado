@@ -7,10 +7,10 @@ import { Hud } from './ui.js';
 const GAME_DURATION = 180;
 const BASE_CAMERA_OFFSET = new THREE.Vector3(0, 23, 76);
 const CAMERA_SCALE_BY_CATEGORY = [
-  { distance: 1, height: 1, lookHeight: 5, fov: 58, fogDensity: 0.0078 },
-  { distance: 1.22, height: 1.08, lookHeight: 6.4, fov: 58.8, fogDensity: 0.0052 },
-  { distance: 1.55, height: 1.2, lookHeight: 9.5, fov: 59.5, fogDensity: 0.0031 },
-  { distance: 1.95, height: 1.34, lookHeight: 14, fov: 60.5, fogDensity: 0.0018 },
+  { distance: 1, height: 1, lookHeight: 5, fov: 58, fogDensity: 0.0058 },
+  { distance: 1.22, height: 1.08, lookHeight: 6.4, fov: 58.8, fogDensity: 0.0042 },
+  { distance: 1.55, height: 1.2, lookHeight: 9.5, fov: 59.5, fogDensity: 0.0028 },
+  { distance: 1.95, height: 1.34, lookHeight: 14, fov: 60.5, fogDensity: 0.0017 },
   { distance: 2.34, height: 1.48, lookHeight: 20, fov: 61.5, fogDensity: 0.001 },
 ];
 
@@ -24,8 +24,8 @@ export class Game {
     this.diagnosticsElement = diagnosticsElement;
     this.clock = new THREE.Clock();
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xdde4df);
-    this.scene.fog = new THREE.FogExp2(0xdde4df, 0.0095);
+    this.scene.background = new THREE.Color(0x7f8d8a);
+    this.scene.fog = new THREE.FogExp2(0x7f8d8a, 0.0058);
 
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 700);
     this.camera.position.copy(BASE_CAMERA_OFFSET);
@@ -99,10 +99,10 @@ export class Game {
   }
 
   setupLights() {
-    const hemisphere = new THREE.HemisphereLight(0xf5efd8, 0x415f4d, 2.1);
+    const hemisphere = new THREE.HemisphereLight(0xaeb8b1, 0x354c42, 1.42);
     this.scene.add(hemisphere);
 
-    const sun = new THREE.DirectionalLight(0xfff3ca, 3.2);
+    const sun = new THREE.DirectionalLight(0xdfd2ad, 2.05);
     sun.position.set(-28, 56, 24);
     sun.castShadow = true;
     sun.shadow.camera.left = -78;

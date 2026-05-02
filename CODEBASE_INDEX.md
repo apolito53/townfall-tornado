@@ -10,7 +10,7 @@
 ## Main Files
 
 - `src/game.js` owns scene setup, renderer, pause state, perspective slider state, category-scaled lower oblique camera follow with adaptive fog, loop timing, score, timer, debris bursts, and render diagnostics.
-- `src/tornado.js` owns tornado growth stats, category thresholds, dramatic diameter scaling, taller wiggly sky-connected funnel visuals, wall cloud base, tail cloud, dust, and airborne debris.
+- `src/tornado.js` owns tornado growth stats, category thresholds, dramatic diameter scaling, taller wiggly sky-connected funnel visuals, procedural storm-sky textures, wall cloud curtains, dust, and airborne debris.
 - `src/town.js` owns terrain, roads, destructible town props, staged structural damage, pressure bursts, persistent ground scars, procedural town chunks, lift thresholds, suction response, and destroyed ratio.
 - `src/input.js` translates keyboard and pointer/touch steering into a normalized movement vector.
 - `src/ui.js` updates the HUD, growth bar, timer, and short storm messages.
@@ -28,10 +28,10 @@
 
 ```powershell
 npm.cmd run build
-$env:TOWNFALL_URL='http://127.0.0.1:5173/'; npm.cmd run verify:render
+$env:TOWNFALL_URL='http://127.0.0.1:5174/'; npm.cmd run verify:render
 ```
 
-`verify:render` expects the Vite dev server to be running.
+`verify:render` expects the Vite dev server to be running. If Vite chooses a different port, point `TOWNFALL_URL` at that live local URL.
 
 ## Sharp Edges
 
