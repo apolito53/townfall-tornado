@@ -9,8 +9,8 @@
 
 ## Main Files
 
-- `src/game.js` owns scene setup, renderer, dramatically category-scaled lower oblique camera follow, loop timing, score, timer, debris bursts, and render diagnostics.
-- `src/tornado.js` owns tornado growth stats, category thresholds, dramatic diameter scaling, movement, sky-connected funnel visuals, cloud shelf, dust, and airborne debris.
+- `src/game.js` owns scene setup, renderer, category-scaled lower oblique camera follow with adaptive fog, loop timing, score, timer, debris bursts, and render diagnostics.
+- `src/tornado.js` owns tornado growth stats, category thresholds, dramatic diameter scaling, taller sky-connected funnel visuals, cloud base, dust, and airborne debris.
 - `src/town.js` owns terrain, roads, destructible town props, staged structural damage, pressure bursts, persistent ground scars, procedural town chunks, lift thresholds, suction response, and destroyed ratio.
 - `src/input.js` translates keyboard and pointer/touch steering into a normalized movement vector.
 - `src/ui.js` updates the HUD, growth bar, timer, and short storm messages.
@@ -20,7 +20,7 @@
 
 - Adjust tornado feel in `src/tornado.js`: category thresholds, diameter `radius`, `pullRadius`, `liftLimit`, `speed`, and `pullStrength`.
 - Add or tune destructible object types in `src/town.js`: creation helpers plus `massRequired`, `points`, `growth`, `radius`, staged damage roles, and procedural chunk placement.
-- Change scoring, timer, combo, camera angle, or diagnostics in `src/game.js`.
+- Change scoring, timer, combo, camera angle/zoom/fog composition, or diagnostics in `src/game.js`.
 - Change visual layout and responsive HUD behavior in `src/styles.css`.
 
 ## Validation Commands

@@ -9,7 +9,7 @@ const CATEGORY_THRESHOLDS = [
 ];
 
 const START_POSITION = new THREE.Vector3(-48, 0, 48);
-const STORM_COLUMN_HEIGHT = 13.5;
+const STORM_COLUMN_HEIGHT = 34;
 
 function getCategoryProfile(mass) {
   let profile = CATEGORY_THRESHOLDS[0];
@@ -82,15 +82,6 @@ export class Tornado {
       }),
     ];
 
-    this.ringMaterial = new THREE.MeshStandardMaterial({
-      color: 0xe7e5d6,
-      emissive: 0x4a5146,
-      roughness: 0.92,
-      transparent: true,
-      opacity: 0.42,
-      depthWrite: false,
-    });
-
     this.funnel = new THREE.Mesh(
       new THREE.CylinderGeometry(1.42, 0.16, STORM_COLUMN_HEIGHT, 48, 5, true),
       this.funnelMaterial,
@@ -118,7 +109,7 @@ export class Tornado {
         ),
         this.turbulenceMaterials[index % this.turbulenceMaterials.length],
       );
-      layer.position.y = STORM_COLUMN_HEIGHT * (0.47 + index * 0.018);
+      layer.position.y = STORM_COLUMN_HEIGHT * (0.47 + index * 0.016);
       layer.userData.phase = Math.random() * Math.PI * 2;
       layer.userData.spin = 0.65 + Math.random() * 0.6;
       this.group.add(layer);
@@ -137,16 +128,6 @@ export class Tornado {
     this.groundCloud.position.y = 0.08;
     this.group.add(this.groundCloud);
 
-    this.rings = [];
-    for (let index = 0; index < 16; index += 1) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.045, 7, 48), this.ringMaterial);
-      ring.position.y = 0.45 + index * (STORM_COLUMN_HEIGHT * 0.82 / 15);
-      ring.rotation.x = Math.PI * 0.5;
-      ring.userData.phase = index * 0.7;
-      this.group.add(ring);
-      this.rings.push(ring);
-    }
-
     this.cloudMaterial = new THREE.MeshStandardMaterial({
       color: 0xd6d2c0,
       emissive: 0x3b3a31,
@@ -160,7 +141,7 @@ export class Tornado {
     for (let index = 0; index < 8; index += 1) {
       const cloud = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), this.cloudMaterial);
       const angle = (index / 8) * Math.PI * 2;
-      cloud.position.set(Math.cos(angle) * 2.2, STORM_COLUMN_HEIGHT + 0.6 + Math.random() * 0.85, Math.sin(angle) * 1.5);
+      cloud.position.set(Math.cos(angle) * 2.2, STORM_COLUMN_HEIGHT + 1.1 + Math.random() * 1.2, Math.sin(angle) * 1.5);
       cloud.rotation.set(Math.random(), Math.random(), Math.random());
       cloud.scale.set(3.2 + Math.random() * 2.2, 0.55 + Math.random() * 0.26, 1.9 + Math.random() * 1.3);
       cloud.userData.angle = angle;
@@ -277,10 +258,10 @@ export class Tornado {
 
   updateVisuals(dt, profile) {
     const radiusScale = profile.radius / 3.2;
-    this.funnel.scale.set(radiusScale, 1 + (profile.category - 1) * 0.035, radiusScale);
+    this.funnel.scale.set(radiusScale, 1 + (profile.category - 1) * 0.06, radiusScale);
     this.funnel.rotation.y -= dt * (1.45 + profile.category * 0.42);
     this.funnelMaterial.opacity = 0.3 + profile.category * 0.045;
-    this.core.scale.set(radiusScale * 0.82, 1 + (profile.category - 1) * 0.035, radiusScale * 0.82);
+    this.core.scale.set(radiusScale * 0.82, 1 + (profile.category - 1) * 0.06, radiusScale * 0.82);
     this.core.rotation.y += dt * (1.9 + profile.category * 0.55);
     this.coreMaterial.opacity = 0.32 + profile.category * 0.035;
     this.groundCloud.rotation.z -= dt * (1.8 + profile.category * 0.35);
@@ -297,19 +278,10 @@ export class Tornado {
       layer.rotation.y -= dt * (layer.userData.spin + profile.category * 0.34) * (index % 2 === 0 ? 1 : -1);
       layer.scale.set(
         radiusScale * (1 + index * 0.15 + Math.sin(phase) * 0.035),
-        1 + index * 0.045 + profile.category * 0.055,
+        1 + index * 0.04 + profile.category * 0.07,
         radiusScale * (1 + index * 0.12 + Math.cos(phase) * 0.035),
       );
       layer.material.opacity = THREE.MathUtils.clamp(0.09 + profile.category * 0.023 - index * 0.004, 0.08, 0.25);
-    }
-
-    for (const ring of this.rings) {
-      const normalizedHeight = ring.position.y / STORM_COLUMN_HEIGHT;
-      const ringRadius = THREE.MathUtils.lerp(profile.radius * 0.18, profile.radius * 0.98, normalizedHeight);
-      const pulse = Math.sin(performance.now() * 0.004 + ring.userData.phase) * 0.08;
-      ring.scale.setScalar(ringRadius + pulse);
-      ring.rotation.z += dt * (1.5 + profile.category * 0.45 + normalizedHeight);
-      ring.material.opacity = THREE.MathUtils.clamp(0.14 + profile.category * 0.038 - normalizedHeight * 0.05, 0.1, 0.44);
     }
 
     for (const cloud of this.cloudShelf) {
@@ -317,7 +289,7 @@ export class Tornado {
       const shelfRadius = profile.radius * (0.95 + Math.sin(performance.now() * 0.001 + cloud.userData.phase) * 0.08);
       cloud.position.x = Math.cos(cloud.userData.angle) * shelfRadius;
       cloud.position.z = Math.sin(cloud.userData.angle) * shelfRadius * 0.72;
-      cloud.position.y = STORM_COLUMN_HEIGHT + 0.3 + profile.category * 0.22 + Math.sin(performance.now() * 0.0018 + cloud.userData.phase) * 0.28;
+      cloud.position.y = STORM_COLUMN_HEIGHT + 0.8 + profile.category * 0.55 + Math.sin(performance.now() * 0.0018 + cloud.userData.phase) * 0.45;
       cloud.rotation.y += dt * 0.18;
       cloud.scale.setScalar((0.9 + profile.category * 0.08) * (1.8 + Math.sin(cloud.userData.phase) * 0.12));
     }
@@ -363,7 +335,7 @@ export class Tornado {
       speck.userData.angle -= dt * speck.userData.speed * (1 + profile.category * 0.14);
       speck.userData.height = (speck.userData.height + dt * 0.018 * speck.userData.speed) % 1;
 
-      const height = 3.2 + speck.userData.height * (STORM_COLUMN_HEIGHT + profile.category * 0.55);
+      const height = 4 + speck.userData.height * (STORM_COLUMN_HEIGHT + profile.category * 1.4);
       const heightRatio = height / STORM_COLUMN_HEIGHT;
       const radius = profile.radius * THREE.MathUtils.lerp(0.78, 1.9, heightRatio) * speck.userData.radiusJitter;
 

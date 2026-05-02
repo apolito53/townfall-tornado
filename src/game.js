@@ -7,11 +7,11 @@ import { Hud } from './ui.js';
 const GAME_DURATION = 180;
 const BASE_CAMERA_OFFSET = new THREE.Vector3(0, 23, 76);
 const CAMERA_SCALE_BY_CATEGORY = [
-  { distance: 1, height: 1, lookHeight: 4.8, fov: 58, fogDensity: 0.0095 },
-  { distance: 1.35, height: 1.16, lookHeight: 6.2, fov: 60, fogDensity: 0.0072 },
-  { distance: 1.9, height: 1.45, lookHeight: 9.5, fov: 62.5, fogDensity: 0.0052 },
-  { distance: 2.65, height: 1.8, lookHeight: 14.5, fov: 65.5, fogDensity: 0.0037 },
-  { distance: 3.45, height: 2.2, lookHeight: 21, fov: 68, fogDensity: 0.0026 },
+  { distance: 1, height: 1, lookHeight: 5, fov: 58, fogDensity: 0.0078 },
+  { distance: 1.22, height: 1.08, lookHeight: 6.4, fov: 58.8, fogDensity: 0.0052 },
+  { distance: 1.55, height: 1.2, lookHeight: 9.5, fov: 59.5, fogDensity: 0.0031 },
+  { distance: 1.95, height: 1.34, lookHeight: 14, fov: 60.5, fogDensity: 0.0018 },
+  { distance: 2.34, height: 1.48, lookHeight: 20, fov: 61.5, fogDensity: 0.001 },
 ];
 
 function getCameraScaleForCategory(category) {
