@@ -1,5 +1,11 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { InputController } from './input.js';
+import { StormAtmosphereShader } from './stormAtmosphereShader.js';
 import { Tornado } from './tornado.js';
 import { Town } from './town.js';
 import { Hud } from './ui.js';
@@ -71,8 +77,12 @@ export class Game {
       powerPreference: 'high-performance',
     });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 0.82;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.setupPostProcessing();
 
     this.input = new InputController(canvas);
     this.hud = new Hud();
@@ -93,6 +103,9 @@ export class Game {
     this.perspectiveAmount = 0.35;
     this.frame = 0;
     this.lastDiagnosticsAt = 0;
+    this.weatherTime = 0;
+    this.lightningTimer = 4.8;
+    this.lightningEnergy = 0;
     this.currentStormProfile = this.tornado.getProfile();
     this.cameraOffset = BASE_CAMERA_OFFSET.clone();
     this.cameraLookHeight = CAMERA_SCALE_BY_CATEGORY[0].lookHeight;
@@ -181,6 +194,18 @@ export class Game {
     this.perspectiveAmount = THREE.MathUtils.clamp(amount, 0, 1);
   }
 
+  setupPostProcessing() {
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+
+    this.bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.12, 0.54, 0.74);
+    this.composer.addPass(this.bloomPass);
+
+    this.stormAtmospherePass = new ShaderPass(StormAtmosphereShader);
+    this.composer.addPass(this.stormAtmospherePass);
+    this.composer.addPass(new OutputPass());
+  }
+
   setupLights() {
     const hemisphere = new THREE.HemisphereLight(0xaeb8b1, 0x354c42, 1.42);
     this.scene.add(hemisphere);
@@ -198,6 +223,10 @@ export class Game {
     const stormGlow = new THREE.PointLight(0xa7ffe0, 1.4, 40);
     stormGlow.position.set(-34, 8, 32);
     this.tornado.group.add(stormGlow);
+
+    this.lightningLight = new THREE.PointLight(0xcfe7ff, 0, 260);
+    this.lightningLight.position.set(-60, 72, -90);
+    this.scene.add(this.lightningLight);
   }
 
   resize() {
@@ -206,6 +235,8 @@ export class Game {
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(width, height, false);
+    this.composer.setSize(width, height);
+    this.stormAtmospherePass.uniforms.resolution.value.set(width, height);
   }
 
   tick() {
@@ -225,7 +256,8 @@ export class Game {
 
     this.updateCamera(dt);
     this.updateDebris(dt);
-    this.renderer.render(this.scene, this.camera);
+    this.updateWeatherShaders(dt);
+    this.composer.render();
     this.collectDiagnostics();
   }
 
@@ -355,6 +387,30 @@ export class Game {
     this.camera.lookAt(lookTarget);
   }
 
+  updateWeatherShaders(dt) {
+    const category = this.currentStormProfile?.category ?? 1;
+    const stormIntensity = THREE.MathUtils.clamp((category - 1) / 4, 0, 1);
+
+    this.weatherTime += dt;
+    this.lightningTimer -= dt * (0.72 + stormIntensity * 0.48);
+    if (this.lightningTimer <= 0) {
+      this.lightningEnergy = 0.72 + Math.random() * 0.48 + stormIntensity * 0.34;
+      this.lightningTimer = THREE.MathUtils.lerp(7.8, 3.8, stormIntensity) + Math.random() * 4.2;
+    }
+
+    this.lightningEnergy = Math.max(0, this.lightningEnergy - dt * (3.8 + stormIntensity * 1.2));
+    const lightning = Math.pow(this.lightningEnergy, 1.7);
+
+    this.stormAtmospherePass.uniforms.time.value = this.weatherTime;
+    this.stormAtmospherePass.uniforms.intensity.value = THREE.MathUtils.lerp(0.18, 0.74, stormIntensity);
+    this.stormAtmospherePass.uniforms.lightning.value = lightning;
+    this.bloomPass.strength = 0.08 + stormIntensity * 0.055 + lightning * 0.18;
+    this.bloomPass.radius = 0.32 + stormIntensity * 0.12;
+    this.bloomPass.threshold = 0.78 - stormIntensity * 0.06;
+    this.renderer.toneMappingExposure = 0.9 + lightning * 0.12;
+    this.lightningLight.intensity = lightning * (3.5 + stormIntensity * 6.5);
+  }
+
   spawnDebrisBurst(position, radius, type) {
     const material = new THREE.MeshStandardMaterial({
       color: type === 'Tree' ? 0x4d8a4f : 0xd7c3a3,
@@ -460,6 +516,10 @@ export class Game {
       levelDamageTarget: this.currentLevel.damageTarget,
       levelTransitioning: this.isLevelTransitioning,
       finished: this.isFinished,
+      postProcessing: true,
+      stormShaderIntensity: Number(this.stormAtmospherePass.uniforms.intensity.value.toFixed(3)),
+      lightning: Number(this.stormAtmospherePass.uniforms.lightning.value.toFixed(3)),
+      bloomStrength: Number(this.bloomPass.strength.toFixed(3)),
     };
 
     Object.assign(this.diagnosticsElement.dataset, {
@@ -484,6 +544,10 @@ export class Game {
       levelDamageTarget: String(diagnostics.levelDamageTarget),
       levelTransitioning: String(diagnostics.levelTransitioning),
       finished: String(diagnostics.finished),
+      postProcessing: String(diagnostics.postProcessing),
+      stormShaderIntensity: String(diagnostics.stormShaderIntensity),
+      lightning: String(diagnostics.lightning),
+      bloomStrength: String(diagnostics.bloomStrength),
     });
 
     window.__townfallDiagnostics = diagnostics;

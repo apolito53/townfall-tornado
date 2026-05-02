@@ -135,6 +135,14 @@ try {
       errors.push(`${viewport.name}: camera did not zoom out enough at high category (${upgradedDiagnostics.cameraZoomScale})`);
     }
 
+    if (upgradedDiagnostics.postProcessing !== true) {
+      errors.push(`${viewport.name}: post-processing diagnostics were not enabled`);
+    }
+
+    if (upgradedDiagnostics.stormShaderIntensity <= 0 || upgradedDiagnostics.bloomStrength <= 0) {
+      errors.push(`${viewport.name}: shader stack did not report active intensity/bloom (${JSON.stringify(upgradedDiagnostics)})`);
+    }
+
     if (!levelUi.levelLabel.includes('Level') || levelUi.levelName.length === 0 || !levelUi.objectiveLabel.includes('Goal')) {
       errors.push(`${viewport.name}: level UI did not render expected labels (${JSON.stringify(levelUi)})`);
     }
@@ -195,7 +203,7 @@ try {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);
     }
 
-    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)}, camera scale ${upgradedDiagnostics.cameraZoomScale}, ${levelUi.levelLabel}`);
+    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
     await page.close();
   }
 } finally {
