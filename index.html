@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Townfall Tornado</title>
+  </head>
+  <body>
+    <main id="app" aria-label="Townfall Tornado">
+      <canvas id="game-canvas" aria-label="Townfall Tornado game canvas"></canvas>
+
+      <section class="hud" aria-label="Storm readout">
+        <div class="hud-panel hud-panel--primary">
+          <span>Storm</span>
+          <strong id="category-label">CAT 1</strong>
+        </div>
+        <div class="hud-panel">
+          <span>Mass</span>
+          <strong id="mass-label">0</strong>
+        </div>
+        <div class="hud-panel">
+          <span>Score</span>
+          <strong id="score-label">0</strong>
+        </div>
+        <div class="hud-panel">
+          <span>Town</span>
+          <strong id="damage-label">0%</strong>
+        </div>
+        <div class="hud-panel hud-panel--timer">
+          <span>Time</span>
+          <strong id="time-label">3:00</strong>
+        </div>
+      </section>
+
+      <section class="storm-meter" aria-label="Storm strength">
+        <div class="storm-meter__bar">
+          <div id="growth-bar" class="storm-meter__fill"></div>
+        </div>
+        <div id="storm-message" class="storm-message" role="status" aria-live="polite"></div>
+      </section>
+
+      <button id="restart-button" class="restart-button" type="button" title="Restart storm">
+        Restart
+      </button>
+
+      <div id="diagnostics" hidden aria-hidden="true"></div>
+    </main>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
