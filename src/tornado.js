@@ -2,10 +2,10 @@ import * as THREE from 'three';
 
 const CATEGORY_THRESHOLDS = [
   { category: 1, mass: 0, radius: 3.2, pullRadius: 8, liftLimit: 12, speed: 18 },
-  { category: 2, mass: 28, radius: 4.4, pullRadius: 11, liftLimit: 34, speed: 17 },
-  { category: 3, mass: 80, radius: 5.9, pullRadius: 14, liftLimit: 72, speed: 15.5 },
-  { category: 4, mass: 160, radius: 7.5, pullRadius: 18, liftLimit: 122, speed: 14 },
-  { category: 5, mass: 285, radius: 9.6, pullRadius: 23, liftLimit: 190, speed: 12.5 },
+  { category: 2, mass: 28, radius: 6.8, pullRadius: 15, liftLimit: 34, speed: 17 },
+  { category: 3, mass: 80, radius: 12.5, pullRadius: 28, liftLimit: 72, speed: 15.5 },
+  { category: 4, mass: 160, radius: 22, pullRadius: 52, liftLimit: 122, speed: 14 },
+  { category: 5, mass: 285, radius: 36, pullRadius: 92, liftLimit: 190, speed: 12.5 },
 ];
 
 const START_POSITION = new THREE.Vector3(-48, 0, 48);
@@ -248,8 +248,8 @@ export class Tornado {
     return {
       category: profile.category,
       mass: this.mass,
-      radius: profile.radius + extraMass * 0.006,
-      pullRadius: profile.pullRadius + extraMass * 0.012,
+      radius: profile.radius + extraMass * 0.022,
+      pullRadius: profile.pullRadius + extraMass * 0.04,
       liftLimit: profile.liftLimit + extraMass * 0.22,
       speed: Math.max(9.5, profile.speed - extraMass * 0.008),
       pullStrength: 17 + profile.category * 7 + extraMass * 0.08,

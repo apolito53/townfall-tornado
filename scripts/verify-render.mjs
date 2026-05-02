@@ -97,7 +97,21 @@ try {
       { timeout: 5000 },
     );
 
+    const scaleProbe = await page.evaluate(() => {
+      const game = window.__townfallGame;
+      const initialRadius = game.tornado.getProfile().radius;
+      game.tornado.mass = 300;
+      const upgradedRadius = game.tornado.getProfile().radius;
+      return { initialRadius, upgradedRadius };
+    });
+    await page.waitForFunction(
+      () => Number(document.querySelector('#diagnostics')?.dataset.cameraZoomScale ?? 1) > 1.15,
+      undefined,
+      { timeout: 5000 },
+    );
+
     const samples = await readCanvasSamples(page);
+    const upgradedDiagnostics = await page.evaluate(() => window.__townfallDiagnostics);
     await page.screenshot({
       path: resolve(artifactDir, `render-${viewport.name}.png`),
       fullPage: false,
@@ -107,11 +121,19 @@ try {
       errors.push(`${viewport.name}: weak canvas sample ${samples.visible}/${samples.total} variance ${samples.variance}`);
     }
 
+    if (scaleProbe.upgradedRadius <= scaleProbe.initialRadius * 2) {
+      errors.push(`${viewport.name}: category radius barely changed ${scaleProbe.initialRadius} -> ${scaleProbe.upgradedRadius}`);
+    }
+
+    if (upgradedDiagnostics.cameraZoomScale <= 1.15) {
+      errors.push(`${viewport.name}: camera did not zoom out enough at high category (${upgradedDiagnostics.cameraZoomScale})`);
+    }
+
     if (consoleErrors.length > 0) {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);
     }
 
-    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}`);
+    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)}, camera scale ${upgradedDiagnostics.cameraZoomScale}`);
     await page.close();
   }
 } finally {

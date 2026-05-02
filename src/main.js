@@ -6,6 +6,9 @@ const game = new Game({
   diagnosticsElement: document.querySelector('#diagnostics'),
 });
 
+// Local prototype hook for browser-side tuning and render smoke checks.
+window.__townfallGame = game;
+
 document.querySelector('#restart-button').addEventListener('click', () => {
   game.restart();
 });

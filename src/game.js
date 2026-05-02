@@ -5,7 +5,18 @@ import { Town } from './town.js';
 import { Hud } from './ui.js';
 
 const GAME_DURATION = 180;
-const CAMERA_OFFSET = new THREE.Vector3(0, 23, 76);
+const BASE_CAMERA_OFFSET = new THREE.Vector3(0, 23, 76);
+const CAMERA_SCALE_BY_CATEGORY = [
+  { distance: 1, height: 1, lookHeight: 4.8, fov: 58, fogDensity: 0.0095 },
+  { distance: 1.35, height: 1.16, lookHeight: 6.2, fov: 60, fogDensity: 0.0072 },
+  { distance: 1.9, height: 1.45, lookHeight: 9.5, fov: 62.5, fogDensity: 0.0052 },
+  { distance: 2.65, height: 1.8, lookHeight: 14.5, fov: 65.5, fogDensity: 0.0037 },
+  { distance: 3.45, height: 2.2, lookHeight: 21, fov: 68, fogDensity: 0.0026 },
+];
+
+function getCameraScaleForCategory(category) {
+  return CAMERA_SCALE_BY_CATEGORY[Math.min(CAMERA_SCALE_BY_CATEGORY.length - 1, Math.max(0, category - 1))];
+}
 
 export class Game {
   constructor({ canvas, diagnosticsElement }) {
@@ -16,8 +27,8 @@ export class Game {
     this.scene.background = new THREE.Color(0xdde4df);
     this.scene.fog = new THREE.FogExp2(0xdde4df, 0.0095);
 
-    this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 250);
-    this.camera.position.copy(CAMERA_OFFSET);
+    this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 700);
+    this.camera.position.copy(BASE_CAMERA_OFFSET);
     this.camera.lookAt(0, 0, 0);
 
     this.renderer = new THREE.WebGLRenderer({
@@ -43,6 +54,9 @@ export class Game {
     this.isFinished = false;
     this.frame = 0;
     this.lastDiagnosticsAt = 0;
+    this.currentStormProfile = this.tornado.getProfile();
+    this.cameraOffset = BASE_CAMERA_OFFSET.clone();
+    this.cameraLookHeight = CAMERA_SCALE_BY_CATEGORY[0].lookHeight;
 
     this.setupLights();
     this.resize();
@@ -62,6 +76,11 @@ export class Game {
     this.isFinished = false;
     this.tornado.restart();
     this.town.restart();
+    this.currentStormProfile = this.tornado.getProfile();
+    this.cameraOffset.copy(BASE_CAMERA_OFFSET);
+    this.cameraLookHeight = CAMERA_SCALE_BY_CATEGORY[0].lookHeight;
+    this.camera.fov = CAMERA_SCALE_BY_CATEGORY[0].fov;
+    this.camera.updateProjectionMatrix();
     this.clearDebris();
     this.hud.flashMessage('Fresh storm front', 1.35);
   }
@@ -113,6 +132,7 @@ export class Game {
     const inputVector = this.input.getMoveVector();
     this.town.ensureGeneratedAround(this.tornado.position);
     const { profile, categoryChanged } = this.tornado.update(dt, inputVector, this.town.boundary);
+    this.currentStormProfile = profile;
     if (categoryChanged) {
       this.hud.flashMessage(`Category ${profile.category}`, 1.7);
     }
@@ -161,10 +181,22 @@ export class Game {
   }
 
   updateCamera(dt) {
-    const targetPosition = this.tornado.group.position.clone().add(CAMERA_OFFSET);
+    const cameraScale = getCameraScaleForCategory(this.currentStormProfile.category);
+    const targetOffset = BASE_CAMERA_OFFSET.clone();
+    targetOffset.y *= cameraScale.height;
+    targetOffset.z *= cameraScale.distance;
+
+    const settleFactor = 1 - Math.pow(0.00003, dt);
+    this.cameraOffset.lerp(targetOffset, settleFactor);
+    this.cameraLookHeight = THREE.MathUtils.lerp(this.cameraLookHeight, cameraScale.lookHeight, settleFactor);
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, cameraScale.fov, settleFactor);
+    this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, cameraScale.fogDensity, settleFactor);
+    this.camera.updateProjectionMatrix();
+
+    const targetPosition = this.tornado.group.position.clone().add(this.cameraOffset);
     this.camera.position.lerp(targetPosition, 1 - Math.pow(0.00001, dt));
     const lookTarget = this.tornado.group.position.clone();
-    lookTarget.y = 4.8;
+    lookTarget.y = this.cameraLookHeight;
     this.camera.lookAt(lookTarget);
   }
 
@@ -261,6 +293,9 @@ export class Game {
       debrisCount: this.debris.length,
       generatedChunks: this.town.generatedChunks.size,
       groundScars: this.town.groundScars.length,
+      cameraZoomScale: Number((this.cameraOffset.z / BASE_CAMERA_OFFSET.z).toFixed(3)),
+      cameraFov: Number(this.camera.fov.toFixed(2)),
+      fogDensity: Number(this.scene.fog.density.toFixed(4)),
     };
 
     Object.assign(this.diagnosticsElement.dataset, {
@@ -273,6 +308,9 @@ export class Game {
       debrisCount: String(diagnostics.debrisCount),
       generatedChunks: String(diagnostics.generatedChunks),
       groundScars: String(diagnostics.groundScars),
+      cameraZoomScale: String(diagnostics.cameraZoomScale),
+      cameraFov: String(diagnostics.cameraFov),
+      fogDensity: String(diagnostics.fogDensity),
     });
 
     window.__townfallDiagnostics = diagnostics;

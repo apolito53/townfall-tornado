@@ -9,16 +9,16 @@
 
 ## Main Files
 
-- `src/game.js` owns scene setup, renderer, lower oblique camera follow, loop timing, score, timer, debris bursts, and render diagnostics.
-- `src/tornado.js` owns tornado growth stats, category thresholds, movement, sky-connected funnel visuals, cloud shelf, dust, and airborne debris.
+- `src/game.js` owns scene setup, renderer, dramatically category-scaled lower oblique camera follow, loop timing, score, timer, debris bursts, and render diagnostics.
+- `src/tornado.js` owns tornado growth stats, category thresholds, dramatic diameter scaling, movement, sky-connected funnel visuals, cloud shelf, dust, and airborne debris.
 - `src/town.js` owns terrain, roads, destructible town props, staged structural damage, pressure bursts, persistent ground scars, procedural town chunks, lift thresholds, suction response, and destroyed ratio.
 - `src/input.js` translates keyboard and pointer/touch steering into a normalized movement vector.
 - `src/ui.js` updates the HUD, growth bar, timer, and short storm messages.
-- `scripts/verify-render.mjs` runs a Playwright smoke test against a live dev server and saves screenshots.
+- `scripts/verify-render.mjs` runs a Playwright smoke test against a live dev server, saves screenshots, and verifies high-category radius/camera scaling through the local `window.__townfallGame` hook.
 
 ## Common Change Targets
 
-- Adjust tornado feel in `src/tornado.js`: category thresholds, `pullRadius`, `liftLimit`, `speed`, and `pullStrength`.
+- Adjust tornado feel in `src/tornado.js`: category thresholds, diameter `radius`, `pullRadius`, `liftLimit`, `speed`, and `pullStrength`.
 - Add or tune destructible object types in `src/town.js`: creation helpers plus `massRequired`, `points`, `growth`, `radius`, staged damage roles, and procedural chunk placement.
 - Change scoring, timer, combo, camera angle, or diagnostics in `src/game.js`.
 - Change visual layout and responsive HUD behavior in `src/styles.css`.
@@ -35,5 +35,6 @@ $env:TOWNFALL_URL='http://127.0.0.1:5173/'; npm.cmd run verify:render
 ## Sharp Edges
 
 - The render diagnostic samples WebGL pixels from the main canvas, so `preserveDrawingBuffer` is enabled in `src/game.js`.
+- `src/main.js` exposes `window.__townfallGame` for local browser tuning and automated scaling checks.
 - This first prototype uses simple custom suction and structural-stress physics rather than a full rigid-body engine.
 - Procedural town chunks are generated near the current edge and stay loaded; introduce unloading or spatial partitioning if long runs get dense.
