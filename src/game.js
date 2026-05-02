@@ -5,7 +5,7 @@ import { Town } from './town.js';
 import { Hud } from './ui.js';
 
 const GAME_DURATION = 180;
-const CAMERA_OFFSET = new THREE.Vector3(0, 42, 42);
+const CAMERA_OFFSET = new THREE.Vector3(0, 23, 76);
 
 export class Game {
   constructor({ canvas, diagnosticsElement }) {
@@ -13,8 +13,8 @@ export class Game {
     this.diagnosticsElement = diagnosticsElement;
     this.clock = new THREE.Clock();
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xa8b8a5);
-    this.scene.fog = new THREE.FogExp2(0xa8b8a5, 0.012);
+    this.scene.background = new THREE.Color(0xdde4df);
+    this.scene.fog = new THREE.FogExp2(0xdde4df, 0.0095);
 
     this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 250);
     this.camera.position.copy(CAMERA_OFFSET);
@@ -111,6 +111,7 @@ export class Game {
     this.remainingTime = Math.max(0, this.remainingTime - dt);
 
     const inputVector = this.input.getMoveVector();
+    this.town.ensureGeneratedAround(this.tornado.position);
     const { profile, categoryChanged } = this.tornado.update(dt, inputVector, this.town.boundary);
     if (categoryChanged) {
       this.hud.flashMessage(`Category ${profile.category}`, 1.7);
@@ -163,7 +164,7 @@ export class Game {
     const targetPosition = this.tornado.group.position.clone().add(CAMERA_OFFSET);
     this.camera.position.lerp(targetPosition, 1 - Math.pow(0.00001, dt));
     const lookTarget = this.tornado.group.position.clone();
-    lookTarget.y = 1.4;
+    lookTarget.y = 4.8;
     this.camera.lookAt(lookTarget);
   }
 
@@ -258,6 +259,8 @@ export class Game {
       tornadoX: Number(this.tornado.position.x.toFixed(2)),
       tornadoZ: Number(this.tornado.position.z.toFixed(2)),
       debrisCount: this.debris.length,
+      generatedChunks: this.town.generatedChunks.size,
+      groundScars: this.town.groundScars.length,
     };
 
     Object.assign(this.diagnosticsElement.dataset, {
@@ -268,6 +271,8 @@ export class Game {
       tornadoX: String(diagnostics.tornadoX),
       tornadoZ: String(diagnostics.tornadoZ),
       debrisCount: String(diagnostics.debrisCount),
+      generatedChunks: String(diagnostics.generatedChunks),
+      groundScars: String(diagnostics.groundScars),
     });
 
     window.__townfallDiagnostics = diagnostics;

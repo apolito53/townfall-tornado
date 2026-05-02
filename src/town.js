@@ -3,6 +3,8 @@ import * as THREE from 'three';
 const BUILDABLE_COORDS = [-34, -22, -10, 10, 22, 34];
 const ROAD_COORDS = [-4, 4];
 const TOWN_BOUNDARY = 50;
+const CHUNK_SIZE = 72;
+const GENERATION_MARGIN = 26;
 
 const MATERIALS = {
   grass: new THREE.MeshStandardMaterial({ color: 0x5c8f5c, roughness: 0.95 }),
@@ -23,7 +25,49 @@ const MATERIALS = {
   fence: new THREE.MeshStandardMaterial({ color: 0xd6c4a2, roughness: 0.95 }),
   metal: new THREE.MeshStandardMaterial({ color: 0xb7b2a7, roughness: 0.48, metalness: 0.25 }),
   sign: new THREE.MeshStandardMaterial({ color: 0xce5e4d, roughness: 0.62 }),
+  rubbleDark: new THREE.MeshStandardMaterial({ color: 0x554835, roughness: 1 }),
+  soilScar: new THREE.MeshBasicMaterial({
+    color: 0x3f3527,
+    transparent: true,
+    opacity: 0.32,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  }),
+  impactScar: new THREE.MeshBasicMaterial({
+    color: 0x2f281f,
+    transparent: true,
+    opacity: 0.46,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  }),
 };
+
+function withRole(mesh, role) {
+  mesh.userData.damageRole = role;
+  return mesh;
+}
+
+function chunkKey(chunkX, chunkZ) {
+  return `${chunkX},${chunkZ}`;
+}
+
+function hashChunk(chunkX, chunkZ) {
+  let hash = 2166136261;
+  hash ^= chunkX + 0x9e3779b9;
+  hash = Math.imul(hash, 16777619);
+  hash ^= chunkZ + 0x85ebca6b;
+  hash = Math.imul(hash, 16777619);
+  return hash >>> 0;
+}
+
+function mulberry32(seed) {
+  return () => {
+    let value = seed += 0x6d2b79f5;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 function box(width, height, depth, material, x = 0, y = 0, z = 0) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
@@ -54,14 +98,14 @@ function createHouse(variant = 0) {
   const wallMaterial = variant % 2 === 0 ? MATERIALS.houseWall : MATERIALS.houseAlt;
   const roofMaterial = variant % 3 === 0 ? MATERIALS.roofGreen : MATERIALS.roofRed;
 
-  group.add(box(5.8, 3.2, 5.4, wallMaterial));
+  group.add(withRole(box(5.8, 3.2, 5.4, wallMaterial), 'structure'));
 
   const roof = createRoof(6.6, 2.2, 6.3, roofMaterial);
   roof.position.y = 4.3;
-  group.add(roof);
+  group.add(withRole(roof, 'roof'));
 
-  group.add(box(1.1, 1.5, 0.12, MATERIALS.glass, -1.6, 1.1, -2.76));
-  group.add(box(1.1, 1.5, 0.12, MATERIALS.glass, 1.6, 1.1, -2.76));
+  group.add(withRole(box(1.1, 1.5, 0.12, MATERIALS.glass, -1.6, 1.1, -2.76), 'detail'));
+  group.add(withRole(box(1.1, 1.5, 0.12, MATERIALS.glass, 1.6, 1.1, -2.76), 'detail'));
 
   return {
     group,
@@ -76,10 +120,10 @@ function createHouse(variant = 0) {
 function createShop(variant = 0) {
   const group = new THREE.Group();
   const bodyMaterial = variant % 2 === 0 ? MATERIALS.shop : MATERIALS.brick;
-  group.add(box(8.8, 4, 6.8, bodyMaterial));
-  group.add(box(9.4, 0.7, 7.4, MATERIALS.roofGreen, 0, 4, 0));
-  group.add(box(5.4, 1.8, 0.14, MATERIALS.glass, 0, 1.2, -3.46));
-  group.add(box(2.2, 1.2, 0.16, MATERIALS.sign, 0, 3.1, -3.58));
+  group.add(withRole(box(8.8, 4, 6.8, bodyMaterial), 'structure'));
+  group.add(withRole(box(9.4, 0.7, 7.4, MATERIALS.roofGreen, 0, 4, 0), 'roof'));
+  group.add(withRole(box(5.4, 1.8, 0.14, MATERIALS.glass, 0, 1.2, -3.46), 'detail'));
+  group.add(withRole(box(2.2, 1.2, 0.16, MATERIALS.sign, 0, 3.1, -3.58), 'detail'));
 
   return {
     group,
@@ -93,12 +137,12 @@ function createShop(variant = 0) {
 
 function createTownHall() {
   const group = new THREE.Group();
-  group.add(box(12, 5.4, 9, MATERIALS.brick));
-  group.add(box(13.2, 0.9, 10.2, MATERIALS.roofRed, 0, 5.35, 0));
-  group.add(box(2.5, 7.5, 2.5, MATERIALS.brick, 0, 4.7, -0.2));
-  group.add(cylinder(1.75, 1.75, 0.8, MATERIALS.metal, 0, 8.3, -0.2, 24));
-  group.add(box(1.9, 2.4, 0.15, MATERIALS.glass, -3.8, 1.8, -4.56));
-  group.add(box(1.9, 2.4, 0.15, MATERIALS.glass, 3.8, 1.8, -4.56));
+  group.add(withRole(box(12, 5.4, 9, MATERIALS.brick), 'structure'));
+  group.add(withRole(box(13.2, 0.9, 10.2, MATERIALS.roofRed, 0, 5.35, 0), 'roof'));
+  group.add(withRole(box(2.5, 7.5, 2.5, MATERIALS.brick, 0, 4.7, -0.2), 'structure'));
+  group.add(withRole(cylinder(1.75, 1.75, 0.8, MATERIALS.metal, 0, 8.3, -0.2, 24), 'roof'));
+  group.add(withRole(box(1.9, 2.4, 0.15, MATERIALS.glass, -3.8, 1.8, -4.56), 'detail'));
+  group.add(withRole(box(1.9, 2.4, 0.15, MATERIALS.glass, 3.8, 1.8, -4.56), 'detail'));
 
   return {
     group,
@@ -112,11 +156,11 @@ function createTownHall() {
 
 function createTree() {
   const group = new THREE.Group();
-  group.add(cylinder(0.28, 0.36, 2.4, MATERIALS.trunk));
+  group.add(withRole(cylinder(0.28, 0.36, 2.4, MATERIALS.trunk), 'structure'));
   const canopy = new THREE.Mesh(new THREE.IcosahedronGeometry(1.25, 1), MATERIALS.leaf);
   canopy.position.y = 3.0;
   canopy.castShadow = true;
-  group.add(canopy);
+  group.add(withRole(canopy, 'canopy'));
   return {
     group,
     type: 'Tree',
@@ -129,9 +173,9 @@ function createTree() {
 
 function createFence(length = 4.8) {
   const group = new THREE.Group();
-  group.add(box(length, 0.55, 0.25, MATERIALS.fence, 0, 0, 0));
-  group.add(box(0.25, 1.1, 0.32, MATERIALS.fence, -length * 0.45, 0, 0));
-  group.add(box(0.25, 1.1, 0.32, MATERIALS.fence, length * 0.45, 0, 0));
+  group.add(withRole(box(length, 0.55, 0.25, MATERIALS.fence, 0, 0, 0), 'detail'));
+  group.add(withRole(box(0.25, 1.1, 0.32, MATERIALS.fence, -length * 0.45, 0, 0), 'structure'));
+  group.add(withRole(box(0.25, 1.1, 0.32, MATERIALS.fence, length * 0.45, 0, 0), 'structure'));
   return {
     group,
     type: 'Fence',
@@ -145,14 +189,14 @@ function createFence(length = 4.8) {
 function createCar(variant = 0) {
   const group = new THREE.Group();
   const bodyMaterial = variant % 2 === 0 ? MATERIALS.carBlue : MATERIALS.carYellow;
-  group.add(box(3.4, 0.9, 1.8, bodyMaterial));
-  group.add(box(1.55, 0.72, 1.55, MATERIALS.glass, -0.25, 0.75, 0));
+  group.add(withRole(box(3.4, 0.9, 1.8, bodyMaterial), 'structure'));
+  group.add(withRole(box(1.55, 0.72, 1.55, MATERIALS.glass, -0.25, 0.75, 0), 'roof'));
 
   for (const x of [-1.15, 1.15]) {
     for (const z of [-0.92, 0.92]) {
       const wheel = cylinder(0.28, 0.28, 0.24, MATERIALS.metal, x, 0.15, z, 12);
       wheel.rotation.x = Math.PI * 0.5;
-      group.add(wheel);
+      group.add(withRole(wheel, 'detail'));
     }
   }
 
@@ -168,8 +212,8 @@ function createCar(variant = 0) {
 
 function createSign() {
   const group = new THREE.Group();
-  group.add(cylinder(0.08, 0.08, 1.7, MATERIALS.metal));
-  group.add(box(1.6, 0.75, 0.12, MATERIALS.sign, 0, 1.35, 0));
+  group.add(withRole(cylinder(0.08, 0.08, 1.7, MATERIALS.metal), 'structure'));
+  group.add(withRole(box(1.6, 0.75, 0.12, MATERIALS.sign, 0, 1.35, 0), 'detail'));
   return {
     group,
     type: 'Sign',
@@ -182,15 +226,15 @@ function createSign() {
 
 function createWaterTower() {
   const group = new THREE.Group();
-  group.add(cylinder(1.45, 1.45, 2.4, MATERIALS.metal, 0, 6.2, 0, 24));
+  group.add(withRole(cylinder(1.45, 1.45, 2.4, MATERIALS.metal, 0, 6.2, 0, 24), 'structure'));
 
   for (const x of [-1.2, 1.2]) {
     for (const z of [-1.2, 1.2]) {
-      group.add(cylinder(0.09, 0.09, 6.3, MATERIALS.metal, x, 0, z, 8));
+      group.add(withRole(cylinder(0.09, 0.09, 6.3, MATERIALS.metal, x, 0, z, 8), 'detail'));
     }
   }
 
-  group.add(box(3.4, 0.28, 3.4, MATERIALS.metal, 0, 5.8, 0));
+  group.add(withRole(box(3.4, 0.28, 3.4, MATERIALS.metal, 0, 5.8, 0), 'detail'));
   return {
     group,
     type: 'Water Tower',
@@ -201,16 +245,29 @@ function createWaterTower() {
   };
 }
 
+const DAMAGE_STAGE_THRESHOLDS = [0.2, 0.48, 0.74];
+const STRUCTURAL_TYPES = new Set(['House', 'Shop', 'Town Hall', 'Water Tower']);
+
 class Destructible {
   constructor(config, position, rotation = 0) {
-    this.group = config.group;
+    this.model = config.group;
+    this.group = new THREE.Group();
+    this.group.add(this.model);
     this.type = config.type;
     this.massRequired = config.massRequired;
     this.points = config.points;
     this.growth = config.growth;
     this.radius = config.radius;
+    this.isStructural = STRUCTURAL_TYPES.has(this.type);
+    this.integrity = config.integrity ?? Math.max(9, this.massRequired * 0.85 + this.radius * 7);
+    this.collapseLiftRatio = this.isStructural ? 0.75 : 0.42;
     this.destroyed = false;
     this.isLifted = false;
+    this.damage = 0;
+    this.damageStage = 0;
+    this.pressureBurstTimer = 0;
+    this.generatedPieces = [];
+    this.lastPullDirection = new THREE.Vector3(1, 0, 0);
     this.velocity = new THREE.Vector3();
     this.spin = new THREE.Vector3(
       (Math.random() - 0.5) * 1.2,
@@ -224,19 +281,63 @@ class Destructible {
     this.baseRotation = this.group.rotation.clone();
     this.baseY = position.y;
     this.baseScale = this.group.scale.clone();
+    this.parts = this.collectParts();
+  }
+
+  collectParts() {
+    const parts = [];
+
+    this.model.traverse((child) => {
+      if (!child.isMesh) {
+        return;
+      }
+
+      child.geometry.computeBoundingBox();
+      const size = new THREE.Vector3();
+      child.geometry.boundingBox.getSize(size);
+      size.multiply(child.scale);
+
+      parts.push({
+        mesh: child,
+        role: child.userData.damageRole ?? 'structure',
+        material: Array.isArray(child.material) ? child.material[0] : child.material,
+        originalPosition: child.position.clone(),
+        originalRotation: child.rotation.clone(),
+        originalScale: child.scale.clone(),
+        originalVisible: child.visible,
+        size,
+      });
+    });
+
+    return parts;
   }
 
   reset() {
     this.destroyed = false;
     this.isLifted = false;
+    this.damage = 0;
+    this.damageStage = 0;
+    this.pressureBurstTimer = 0;
     this.velocity.set(0, 0, 0);
+    this.lastPullDirection.set(1, 0, 0);
     this.group.visible = true;
+    this.model.visible = true;
     this.group.position.copy(this.basePosition);
     this.group.rotation.copy(this.baseRotation);
     this.group.scale.copy(this.baseScale);
+    this.removeGeneratedPieces();
+
+    for (const part of this.parts) {
+      part.mesh.visible = part.originalVisible;
+      part.mesh.position.copy(part.originalPosition);
+      part.mesh.rotation.copy(part.originalRotation);
+      part.mesh.scale.copy(part.originalScale);
+    }
   }
 
   update(stormProfile, stormPosition, dt) {
+    this.updateGeneratedPieces(dt);
+
     if (this.destroyed) {
       return null;
     }
@@ -245,50 +346,328 @@ class Destructible {
     offset.y = 0;
     const distance = Math.max(0.001, offset.length());
     const reachable = distance < stormProfile.pullRadius + this.radius;
-    const liftable = this.massRequired <= stormProfile.liftLimit;
 
     if (!reachable) {
       this.settle(dt);
       return null;
     }
 
+    const inward = distance > 0.01 ? offset.clone().normalize() : this.lastPullDirection.clone();
+    this.lastPullDirection.copy(inward);
     const pullRatio = THREE.MathUtils.clamp(1 - distance / (stormProfile.pullRadius + this.radius), 0, 1);
+    const collapsedFromStress = this.applyStormStress(stormProfile, stormPosition, pullRatio, dt);
 
-    if (!liftable) {
-      this.rattleAgainstStorm(pullRatio, dt);
+    if (collapsedFromStress) {
+      return this;
+    }
+
+    this.applyDamagePose(inward, pullRatio, dt);
+
+    // Buildings should not float away as whole boxes. They deform and fail into rubble instead.
+    if (this.isStructural || this.massRequired > stormProfile.liftLimit) {
+      this.rattleAgainstStorm(pullRatio, dt, inward);
       return null;
     }
 
     this.isLifted = true;
-    const inward = offset.normalize();
     const tangent = new THREE.Vector3(-inward.z, 0, inward.x);
     const liftBias = THREE.MathUtils.clamp((stormProfile.liftLimit - this.massRequired) / Math.max(1, stormProfile.liftLimit), 0.25, 1);
-    const pullAcceleration = stormProfile.pullStrength * pullRatio * liftBias;
+    const damageDrag = 1 + this.damage * 0.45;
+    const pullAcceleration = stormProfile.pullStrength * pullRatio * liftBias * damageDrag;
 
     this.velocity.addScaledVector(inward, pullAcceleration * dt);
     this.velocity.addScaledVector(tangent, pullAcceleration * 0.72 * dt);
-    this.velocity.y += (2.5 + stormProfile.category * 0.65) * pullRatio * dt;
+    this.velocity.y += (2.2 + stormProfile.category * 0.56) * pullRatio * dt;
     this.velocity.multiplyScalar(1 - Math.min(0.82, dt * 1.7));
 
     this.group.position.addScaledVector(this.velocity, dt);
-    this.group.position.y = THREE.MathUtils.lerp(this.group.position.y, 0.7 + stormProfile.category * 0.52, dt * 1.8);
+    this.group.position.y = THREE.MathUtils.lerp(this.group.position.y, 0.55 + stormProfile.category * 0.46, dt * 1.8);
     this.group.rotation.x += this.spin.x * dt;
     this.group.rotation.y += this.spin.y * dt;
     this.group.rotation.z += this.spin.z * dt;
 
-    if (distance < stormProfile.radius * 0.64 + this.radius * 0.38) {
-      this.destroyed = true;
-      this.group.visible = false;
+    if (distance < stormProfile.radius * 0.66 + this.radius * 0.36 || this.damage >= 1) {
+      this.swallowIntoStorm();
       return this;
     }
 
     return null;
   }
 
+  applyStormStress(stormProfile, stormPosition, pullRatio, dt) {
+    const stormForce = pullRatio * (stormProfile.pullStrength + stormProfile.liftLimit * 0.34);
+    const stability = this.massRequired * (this.isStructural ? 0.46 : 0.36) + this.radius * 2.35;
+    const stress = Math.max(0, stormForce - stability);
+
+    if (stress <= 0) {
+      return false;
+    }
+
+    const canFullyFail = !this.isStructural || stormProfile.liftLimit >= this.massRequired * this.collapseLiftRatio;
+    const damageCeiling = canFullyFail ? 1 : 0.68;
+    const damageRate = (stress / this.integrity) * (0.72 + pullRatio * 0.85);
+    this.damage = Math.min(damageCeiling, this.damage + damageRate * dt);
+    this.releaseDamageStages(stormPosition);
+
+    if (this.isStructural) {
+      this.emitPressureBurst(stormProfile, stormPosition, stormForce, pullRatio, dt);
+    }
+
+    if (this.isStructural && this.damage >= 1 && canFullyFail) {
+      this.collapseIntoWreckage(stormPosition, stormProfile);
+      return true;
+    }
+
+    return false;
+  }
+
+  releaseDamageStages(stormPosition) {
+    while (
+      this.damageStage < DAMAGE_STAGE_THRESHOLDS.length
+      && this.damage >= DAMAGE_STAGE_THRESHOLDS[this.damageStage]
+    ) {
+      this.damageStage += 1;
+      this.shedDamageStage(this.damageStage, stormPosition);
+    }
+  }
+
+  emitPressureBurst(stormProfile, stormPosition, stormForce, pullRatio, dt) {
+    if (pullRatio < 0.3 || this.damage < 0.08) {
+      return;
+    }
+
+    this.pressureBurstTimer -= dt;
+    if (this.pressureBurstTimer > 0) {
+      return;
+    }
+
+    this.pressureBurstTimer = THREE.MathUtils.clamp(0.42 - pullRatio * 0.22 - this.damage * 0.16, 0.11, 0.42);
+    const stormLocal = this.group.worldToLocal(stormPosition.clone());
+    stormLocal.y = 0;
+    const towardStorm = stormLocal.lengthSq() > 0.01
+      ? stormLocal.normalize()
+      : this.lastPullDirection.clone();
+    const chunkCount = Math.min(7, Math.max(2, Math.ceil(this.damage * 5 + pullRatio * 4)));
+    const baseSize = THREE.MathUtils.clamp(0.16 + stormForce * 0.004, 0.2, 0.58);
+
+    for (let index = 0; index < chunkCount; index += 1) {
+      const height = 0.8 + Math.random() * (1.4 + this.radius * 0.35);
+      const sideOffset = new THREE.Vector3(
+        towardStorm.x * this.radius * (0.34 + Math.random() * 0.36),
+        height,
+        towardStorm.z * this.radius * (0.34 + Math.random() * 0.36),
+      );
+      const tangential = new THREE.Vector3(-towardStorm.z, 0, towardStorm.x).multiplyScalar((Math.random() - 0.5) * this.radius * 0.38);
+      const part = this.parts[Math.floor(Math.random() * this.parts.length)];
+      this.createGeneratedPiece(
+        sideOffset.add(tangential),
+        part?.material ?? MATERIALS.rubbleDark,
+        baseSize,
+        stormPosition,
+        true,
+        true,
+      );
+    }
+  }
+
+  shedDamageStage(stage, stormPosition) {
+    const targetRoles = stage === 1
+      ? ['detail', 'wheel']
+      : ['roof', 'canopy', 'detail'];
+    const candidates = this.parts
+      .filter((part) => part.mesh.visible && targetRoles.includes(part.role))
+      .sort((a, b) => b.originalPosition.y - a.originalPosition.y);
+    const partsToBreak = candidates.slice(0, Math.max(1, Math.min(candidates.length, stage)));
+
+    for (const part of partsToBreak) {
+      part.mesh.visible = false;
+      this.createFragmentsFromPart(part, 2 + stage * 2, stormPosition);
+    }
+
+    if (partsToBreak.length === 0) {
+      const fallbackPosition = new THREE.Vector3(
+        (Math.random() - 0.5) * this.radius,
+        0.65 + Math.random() * 0.8,
+        (Math.random() - 0.5) * this.radius,
+      );
+      this.createFragmentCluster(fallbackPosition, MATERIALS.rubbleDark, 3 + stage * 2, stormPosition, 0.28);
+    }
+  }
+
+  createFragmentsFromPart(part, count, stormPosition) {
+    const baseSize = Math.max(0.12, Math.min(0.55, Math.max(part.size.x, part.size.y, part.size.z) * 0.22));
+    this.createFragmentCluster(part.originalPosition, part.material, count, stormPosition, baseSize);
+  }
+
+  createFragmentCluster(localPosition, material, count, stormPosition, baseSize) {
+    for (let index = 0; index < count; index += 1) {
+      const jitter = new THREE.Vector3(
+        (Math.random() - 0.5) * baseSize * 3,
+        (Math.random() - 0.5) * baseSize * 2,
+        (Math.random() - 0.5) * baseSize * 3,
+      );
+      this.createGeneratedPiece(localPosition.clone().add(jitter), material, baseSize, stormPosition, true);
+    }
+  }
+
+  createGeneratedPiece(localPosition, material, baseSize, stormPosition, dynamic, pulledTowardStorm = false) {
+    const piece = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material ?? MATERIALS.rubbleDark);
+    const size = baseSize * (0.55 + Math.random() * 1.5);
+    piece.scale.set(size * (0.7 + Math.random()), size * (0.35 + Math.random() * 0.8), size * (0.7 + Math.random()));
+    piece.position.copy(localPosition);
+    piece.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    piece.castShadow = true;
+    piece.receiveShadow = true;
+
+    const stormLocal = this.group.worldToLocal(stormPosition.clone());
+    const direction = pulledTowardStorm
+      ? stormLocal.clone().sub(localPosition)
+      : localPosition.clone().sub(stormLocal);
+    direction.y = 0;
+    if (direction.lengthSq() < 0.01) {
+      direction.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+    }
+    direction.normalize();
+    const tangent = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar((Math.random() - 0.5) * 1.6);
+
+    piece.userData.velocity = new THREE.Vector3(
+      direction.x * (1.2 + Math.random() * 2.2) + tangent.x,
+      dynamic ? 2 + Math.random() * 3.5 + (pulledTowardStorm ? 1.2 : 0) : 0,
+      direction.z * (1.2 + Math.random() * 2.2) + tangent.z,
+    );
+    piece.userData.dynamic = dynamic;
+    piece.userData.floorY = piece.scale.y * 0.5;
+    this.group.add(piece);
+    this.generatedPieces.push(piece);
+    this.limitGeneratedPieces(this.isStructural ? 130 : 36);
+  }
+
+  limitGeneratedPieces(maxPieces) {
+    while (this.generatedPieces.length > maxPieces) {
+      const oldestPiece = this.generatedPieces.shift();
+      this.group.remove(oldestPiece);
+    }
+  }
+
+  updateGeneratedPieces(dt) {
+    for (const piece of this.generatedPieces) {
+      if (!piece.userData.dynamic) {
+        continue;
+      }
+
+      piece.userData.velocity.y -= 9.8 * dt;
+      piece.position.addScaledVector(piece.userData.velocity, dt);
+      piece.rotation.x += dt * 4.4;
+      piece.rotation.y += dt * 3.8;
+
+      if (piece.position.y <= piece.userData.floorY) {
+        piece.position.y = piece.userData.floorY;
+        piece.userData.velocity.y = 0;
+        piece.userData.velocity.x *= 1 - Math.min(0.92, dt * 6);
+        piece.userData.velocity.z *= 1 - Math.min(0.92, dt * 6);
+
+        if (piece.userData.velocity.lengthSq() < 0.08) {
+          piece.userData.dynamic = false;
+        }
+      }
+    }
+  }
+
+  removeGeneratedPieces() {
+    for (const piece of this.generatedPieces) {
+      this.group.remove(piece);
+    }
+    this.generatedPieces = [];
+  }
+
+  collapseIntoWreckage(stormPosition, stormProfile) {
+    this.destroyed = true;
+    this.isLifted = false;
+    this.velocity.set(0, 0, 0);
+    this.model.visible = false;
+    this.group.position.y = this.baseY;
+    this.group.rotation.copy(this.baseRotation);
+    this.group.scale.copy(this.baseScale);
+
+    const rubbleCount = Math.min(48, Math.max(14, Math.round(this.radius * 5.4)));
+    const baseSize = THREE.MathUtils.clamp(this.radius * 0.11, 0.28, 0.9);
+
+    for (let index = 0; index < rubbleCount; index += 1) {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = Math.sqrt(Math.random()) * this.radius * 0.92;
+      const localPosition = new THREE.Vector3(
+        Math.cos(angle) * distance,
+        0.18 + Math.random() * 0.55,
+        Math.sin(angle) * distance,
+      );
+      const sourcePart = this.parts[index % this.parts.length];
+      this.createGeneratedPiece(localPosition, sourcePart?.material ?? MATERIALS.rubbleDark, baseSize, stormPosition, true);
+    }
+
+    // A few heavier slabs stay near the footprint, which reads more like collapse than confetti.
+    for (let index = 0; index < Math.ceil(this.radius / 1.8); index += 1) {
+      const slabPosition = new THREE.Vector3(
+        (Math.random() - 0.5) * this.radius,
+        0.12,
+        (Math.random() - 0.5) * this.radius,
+      );
+      this.createGeneratedPiece(slabPosition, MATERIALS.rubbleDark, baseSize * 1.7, stormPosition, false);
+    }
+
+    this.damage = 1;
+    this.damageStage = DAMAGE_STAGE_THRESHOLDS.length;
+    this.generatedPieces.forEach((piece) => {
+      piece.userData.velocity.multiplyScalar(0.65 + stormProfile.category * 0.08);
+    });
+  }
+
+  swallowIntoStorm() {
+    this.destroyed = true;
+    this.model.visible = false;
+    this.removeGeneratedPieces();
+  }
+
+  applyDamagePose(inward, pullRatio, dt) {
+    if (this.isLifted) {
+      return;
+    }
+
+    const lean = this.damage * 0.16 + pullRatio * 0.035;
+    const crush = 1 - this.damage * (this.isStructural ? 0.1 : 0.04);
+    const settleFactor = 1 - Math.pow(0.0001, dt);
+
+    this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, this.baseRotation.x + inward.z * lean, settleFactor);
+    this.group.rotation.z = THREE.MathUtils.lerp(this.group.rotation.z, this.baseRotation.z - inward.x * lean, settleFactor);
+    this.group.scale.x = THREE.MathUtils.lerp(this.group.scale.x, this.baseScale.x * (1 + this.damage * 0.025), settleFactor);
+    this.group.scale.y = THREE.MathUtils.lerp(this.group.scale.y, this.baseScale.y * crush, settleFactor);
+    this.group.scale.z = THREE.MathUtils.lerp(this.group.scale.z, this.baseScale.z * (1 + this.damage * 0.025), settleFactor);
+
+    for (const part of this.parts) {
+      if (!part.mesh.visible) {
+        continue;
+      }
+
+      const roleLift = part.role === 'roof' || part.role === 'canopy' ? this.damage * 0.42 : this.damage * 0.08;
+      const roleTwist = part.role === 'structure' ? this.damage * 0.035 : this.damage * 0.18;
+      part.mesh.position.y = THREE.MathUtils.lerp(part.mesh.position.y, part.originalPosition.y + roleLift, settleFactor);
+      part.mesh.rotation.z = THREE.MathUtils.lerp(
+        part.mesh.rotation.z,
+        part.originalRotation.z + Math.sin(performance.now() * 0.008 + this.massRequired) * roleTwist,
+        settleFactor,
+      );
+    }
+  }
+
   settle(dt) {
     const settleFactor = 1 - Math.pow(0.001, dt);
-    this.group.scale.lerp(this.baseScale, settleFactor);
-    this.group.rotation.z = THREE.MathUtils.lerp(this.group.rotation.z, this.baseRotation.z, settleFactor);
+
+    if (this.damage > 0 && !this.destroyed) {
+      this.applyDamagePose(this.lastPullDirection, 0, dt);
+    } else {
+      this.group.scale.lerp(this.baseScale, settleFactor);
+      this.group.rotation.x = THREE.MathUtils.lerp(this.group.rotation.x, this.baseRotation.x, settleFactor);
+      this.group.rotation.z = THREE.MathUtils.lerp(this.group.rotation.z, this.baseRotation.z, settleFactor);
+    }
 
     if (this.isLifted) {
       this.velocity.multiplyScalar(1 - Math.min(0.95, dt * 4));
@@ -297,10 +676,10 @@ class Destructible {
     }
   }
 
-  rattleAgainstStorm(pullRatio, dt) {
-    const shake = Math.sin(performance.now() * 0.05 + this.massRequired) * 0.025 * pullRatio;
-    this.group.rotation.z = THREE.MathUtils.lerp(this.group.rotation.z, shake, dt * 12);
-    this.group.scale.setScalar(1 + pullRatio * 0.018);
+  rattleAgainstStorm(pullRatio, dt, inward) {
+    const shake = Math.sin(performance.now() * 0.05 + this.massRequired) * 0.03 * pullRatio;
+    this.group.rotation.x += inward.z * shake * dt * 8;
+    this.group.rotation.z -= inward.x * shake * dt * 8;
   }
 }
 
@@ -308,33 +687,73 @@ export class Town {
   constructor(scene) {
     this.scene = scene;
     this.group = new THREE.Group();
+    this.groundDamageGroup = new THREE.Group();
     this.items = [];
+    this.groundScars = [];
+    this.groundScarTimer = 0;
+    this.generatedChunks = new Set([chunkKey(0, 0)]);
+    this.boundarySize = TOWN_BOUNDARY;
     this.scene.add(this.group);
     this.createTerrain();
+    this.group.add(this.groundDamageGroup);
     this.populateTown();
   }
 
   get boundary() {
-    return TOWN_BOUNDARY;
+    return this.boundarySize;
   }
 
   restart() {
     for (const item of this.items) {
       item.reset();
     }
+    this.clearGroundDamage();
   }
 
   update(stormProfile, stormPosition, dt) {
     const absorbedItems = [];
+    this.ensureGeneratedAround(stormPosition);
+    this.applyStormGroundDamage(stormPosition, stormProfile, dt);
 
     for (const item of this.items) {
       const absorbed = item.update(stormProfile, stormPosition, dt);
       if (absorbed) {
         absorbedItems.push(absorbed);
+        this.addCollapseScar(absorbed.group.position, absorbed.radius, absorbed.isStructural ? 1 : 0.45);
       }
     }
 
     return absorbedItems;
+  }
+
+  ensureGeneratedAround(position) {
+    const nearCurrentEdge = Math.abs(position.x) > this.boundarySize - GENERATION_MARGIN
+      || Math.abs(position.z) > this.boundarySize - GENERATION_MARGIN;
+
+    if (!nearCurrentEdge) {
+      return;
+    }
+
+    const centerChunkX = Math.round(position.x / CHUNK_SIZE);
+    const centerChunkZ = Math.round(position.z / CHUNK_SIZE);
+
+    for (let dz = -1; dz <= 1; dz += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        const chunkX = centerChunkX + dx;
+        const chunkZ = centerChunkZ + dz;
+        const key = chunkKey(chunkX, chunkZ);
+
+        if (this.generatedChunks.has(key)) {
+          continue;
+        }
+
+        this.generatedChunks.add(key);
+        this.createProceduralChunk(chunkX, chunkZ);
+      }
+    }
+
+    const furthestChunk = Math.max(Math.abs(centerChunkX) + 1, Math.abs(centerChunkZ) + 1);
+    this.boundarySize = Math.max(this.boundarySize, furthestChunk * CHUNK_SIZE + CHUNK_SIZE * 0.62);
   }
 
   getDestroyedRatio() {
@@ -367,6 +786,138 @@ export class Town {
       this.group.add(box(130, 0.06, 1.2, MATERIALS.sidewalk, 0, 0.02, coord));
       this.group.add(box(1.2, 0.06, 130, MATERIALS.sidewalk, coord, 0.02, 0));
     }
+  }
+
+  createProceduralChunk(chunkX, chunkZ) {
+    const originX = chunkX * CHUNK_SIZE;
+    const originZ = chunkZ * CHUNK_SIZE;
+    const random = mulberry32(hashChunk(chunkX, chunkZ));
+
+    this.createTerrainPatch(originX, originZ);
+    this.populateProceduralChunk(originX, originZ, random);
+  }
+
+  createTerrainPatch(originX, originZ) {
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(CHUNK_SIZE + 1, CHUNK_SIZE + 1), MATERIALS.grass);
+    ground.position.set(originX, -0.01, originZ);
+    ground.rotation.x = -Math.PI * 0.5;
+    ground.receiveShadow = true;
+    this.group.add(ground);
+
+    const horizontalRoad = box(CHUNK_SIZE + 2, 0.08, 5, MATERIALS.road, originX, 0, originZ);
+    const verticalRoad = box(5, 0.08, CHUNK_SIZE + 2, MATERIALS.road, originX, 0, originZ);
+    this.group.add(horizontalRoad, verticalRoad);
+
+    for (const offset of [-7, 7]) {
+      this.group.add(box(CHUNK_SIZE + 2, 0.06, 1, MATERIALS.sidewalk, originX, 0.02, originZ + offset));
+      this.group.add(box(1, 0.06, CHUNK_SIZE + 2, MATERIALS.sidewalk, originX + offset, 0.02, originZ));
+    }
+
+    for (let index = -CHUNK_SIZE * 0.42; index <= CHUNK_SIZE * 0.42; index += 12) {
+      this.group.add(box(2.5, 0.1, 0.16, MATERIALS.roadStripe, originX + index, 0.06, originZ));
+      this.group.add(box(0.16, 0.1, 2.5, MATERIALS.roadStripe, originX, 0.06, originZ + index));
+    }
+  }
+
+  populateProceduralChunk(originX, originZ, random) {
+    const localLots = [-25, -14, 14, 25];
+    let variant = Math.floor(random() * 1000);
+
+    for (const localX of localLots) {
+      for (const localZ of localLots) {
+        const roll = random();
+        if (roll < 0.08) {
+          continue;
+        }
+
+        const position = new THREE.Vector3(
+          originX + localX + (random() - 0.5) * 3.2,
+          0,
+          originZ + localZ + (random() - 0.5) * 3.2,
+        );
+        const config = roll > 0.82 ? createShop(variant) : createHouse(variant);
+        this.addItem(config, position, Math.floor(random() * 4) * Math.PI * 0.5);
+        variant += 1;
+      }
+    }
+
+    for (let index = 0; index < 7; index += 1) {
+      const alongRoad = -CHUNK_SIZE * 0.42 + index * (CHUNK_SIZE * 0.14);
+      const side = random() > 0.5 ? -7.2 : 7.2;
+      const onVerticalRoad = random() > 0.5;
+      this.addItem(
+        createCar(variant + index),
+        new THREE.Vector3(
+          originX + (onVerticalRoad ? side : alongRoad),
+          0,
+          originZ + (onVerticalRoad ? alongRoad : side),
+        ),
+        onVerticalRoad ? Math.PI * 0.5 : 0,
+      );
+    }
+
+    for (let index = 0; index < 10; index += 1) {
+      const edge = Math.floor(random() * 4);
+      const x = edge < 2 ? -CHUNK_SIZE * 0.44 + random() * CHUNK_SIZE * 0.88 : (edge === 2 ? -30 : 30);
+      const z = edge >= 2 ? -CHUNK_SIZE * 0.44 + random() * CHUNK_SIZE * 0.88 : (edge === 0 ? -30 : 30);
+      this.addItem(createTree(), new THREE.Vector3(originX + x, 0, originZ + z), random() * Math.PI * 2);
+    }
+
+    for (let index = 0; index < 8; index += 1) {
+      const x = -CHUNK_SIZE * 0.38 + index * (CHUNK_SIZE * 0.11);
+      const z = random() > 0.5 ? -CHUNK_SIZE * 0.45 : CHUNK_SIZE * 0.45;
+      this.addItem(createFence(3.6 + random() * 2.6), new THREE.Vector3(originX + x, 0, originZ + z), random() > 0.5 ? 0 : Math.PI * 0.5);
+    }
+  }
+
+  applyStormGroundDamage(stormPosition, stormProfile, dt) {
+    this.groundScarTimer += dt;
+    const cadence = THREE.MathUtils.clamp(0.17 - stormProfile.category * 0.018, 0.065, 0.15);
+
+    if (this.groundScarTimer < cadence) {
+      return;
+    }
+
+    this.groundScarTimer = 0;
+    const radius = stormProfile.radius * (0.86 + Math.random() * 0.28);
+    const opacity = THREE.MathUtils.clamp(0.22 + stormProfile.category * 0.04, 0.24, 0.5);
+    this.addGroundScar(stormPosition, radius, opacity, MATERIALS.soilScar);
+  }
+
+  addCollapseScar(position, radius, intensity = 1) {
+    this.addGroundScar(
+      position,
+      radius * (0.9 + intensity * 0.55),
+      THREE.MathUtils.clamp(0.26 + intensity * 0.18, 0.24, 0.58),
+      MATERIALS.impactScar,
+    );
+  }
+
+  addGroundScar(position, radius, opacity, materialTemplate) {
+    const material = materialTemplate.clone();
+    material.opacity = opacity;
+    const scar = new THREE.Mesh(new THREE.CircleGeometry(1, 26), material);
+    scar.position.set(position.x, 0.115 + this.groundScars.length * 0.0003, position.z);
+    scar.rotation.x = -Math.PI * 0.5;
+    scar.rotation.z = Math.random() * Math.PI;
+    scar.scale.set(radius * (0.65 + Math.random() * 0.35), radius * (0.28 + Math.random() * 0.28), 1);
+    scar.renderOrder = 2;
+    this.groundDamageGroup.add(scar);
+    this.groundScars.push(scar);
+
+    const maxScars = 180;
+    while (this.groundScars.length > maxScars) {
+      const oldScar = this.groundScars.shift();
+      this.groundDamageGroup.remove(oldScar);
+    }
+  }
+
+  clearGroundDamage() {
+    for (const scar of this.groundScars) {
+      this.groundDamageGroup.remove(scar);
+    }
+    this.groundScars = [];
+    this.groundScarTimer = 0;
   }
 
   populateTown() {
