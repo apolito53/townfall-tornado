@@ -1,11 +1,12 @@
 import * as THREE from 'three';
+import { CATEGORY_MASS_REQUIREMENTS } from './categoryProgression.js';
 
 const CATEGORY_THRESHOLDS = [
-  { category: 1, mass: 0, radius: 3.2, pullRadius: 8, liftLimit: 12, speed: 18 },
-  { category: 2, mass: 28, radius: 6.8, pullRadius: 15, liftLimit: 34, speed: 17 },
-  { category: 3, mass: 80, radius: 12.5, pullRadius: 28, liftLimit: 72, speed: 15.5 },
-  { category: 4, mass: 160, radius: 22, pullRadius: 52, liftLimit: 122, speed: 14 },
-  { category: 5, mass: 285, radius: 36, pullRadius: 92, liftLimit: 190, speed: 12.5 },
+  { category: 1, mass: CATEGORY_MASS_REQUIREMENTS[0], radius: 3.2, pullRadius: 8, liftLimit: 12, speed: 18 },
+  { category: 2, mass: CATEGORY_MASS_REQUIREMENTS[1], radius: 6.8, pullRadius: 15, liftLimit: 34, speed: 17 },
+  { category: 3, mass: CATEGORY_MASS_REQUIREMENTS[2], radius: 12.5, pullRadius: 28, liftLimit: 72, speed: 15.5 },
+  { category: 4, mass: CATEGORY_MASS_REQUIREMENTS[3], radius: 22, pullRadius: 52, liftLimit: 122, speed: 14 },
+  { category: 5, mass: CATEGORY_MASS_REQUIREMENTS[4], radius: 36, pullRadius: 92, liftLimit: 190, speed: 12.5 },
 ];
 
 const START_POSITION = new THREE.Vector3(-48, 0, 48);

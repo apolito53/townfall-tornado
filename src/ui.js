@@ -1,4 +1,4 @@
-const CATEGORY_MASS_TARGETS = [0, 28, 80, 160, 285, 440];
+import { CATEGORY_MASS_REQUIREMENTS, MAX_TORNADO_CATEGORY } from './categoryProgression.js';
 
 function formatNumber(value) {
   return Math.round(value).toLocaleString('en-US');
@@ -53,9 +53,9 @@ export class Hud {
     this.damageLabel.textContent = `${Math.round(state.destroyedRatio * 100)}%`;
     this.timeLabel.textContent = formatTime(state.remainingTime);
 
-    const currentTarget = CATEGORY_MASS_TARGETS[state.category - 1] ?? 0;
-    const nextTarget = CATEGORY_MASS_TARGETS[state.category] ?? CATEGORY_MASS_TARGETS.at(-1);
-    const growthProgress = state.category >= 5
+    const currentTarget = CATEGORY_MASS_REQUIREMENTS[state.category - 1] ?? 0;
+    const nextTarget = CATEGORY_MASS_REQUIREMENTS[state.category] ?? CATEGORY_MASS_REQUIREMENTS.at(-1);
+    const growthProgress = state.category >= MAX_TORNADO_CATEGORY
       ? 1
       : (state.mass - currentTarget) / Math.max(1, nextTarget - currentTarget);
     this.growthBar.style.transform = `scaleX(${Math.min(1, Math.max(0, growthProgress))})`;

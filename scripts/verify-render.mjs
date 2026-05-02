@@ -100,9 +100,21 @@ try {
     const scaleProbe = await page.evaluate(() => {
       const game = window.__townfallGame;
       const initialRadius = game.tornado.getProfile().radius;
-      game.tornado.mass = 300;
-      const upgradedRadius = game.tornado.getProfile().radius;
-      return { initialRadius, upgradedRadius };
+      let probeMass = Math.max(50, game.tornado.mass);
+      let upgradedProfile = game.tornado.getProfile();
+
+      while (upgradedProfile.category < 5 && probeMass < 5000) {
+        probeMass += 50;
+        game.tornado.mass = probeMass;
+        upgradedProfile = game.tornado.getProfile();
+      }
+
+      return {
+        initialRadius,
+        upgradedRadius: upgradedProfile.radius,
+        upgradedCategory: upgradedProfile.category,
+        probeMass,
+      };
     });
     await page.waitForFunction(
       () => Number(document.querySelector('#diagnostics')?.dataset.cameraZoomScale ?? 1) > 1.15,
@@ -129,6 +141,10 @@ try {
 
     if (scaleProbe.upgradedRadius <= scaleProbe.initialRadius * 2) {
       errors.push(`${viewport.name}: category radius barely changed ${scaleProbe.initialRadius} -> ${scaleProbe.upgradedRadius}`);
+    }
+
+    if (scaleProbe.upgradedCategory < 5) {
+      errors.push(`${viewport.name}: category probe did not reach Cat 5 by mass ${scaleProbe.probeMass}`);
     }
 
     if (upgradedDiagnostics.cameraZoomScale <= 1.15) {
@@ -203,7 +219,7 @@ try {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);
     }
 
-    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
+    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
     await page.close();
   }
 } finally {
