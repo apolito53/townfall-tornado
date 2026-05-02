@@ -38,18 +38,17 @@ body {
 
 .hud {
   position: fixed;
-  top: 16px;
+  bottom: 16px;
   left: 16px;
-  right: 16px;
   display: grid;
-  grid-template-columns: repeat(5, minmax(88px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(5, minmax(54px, auto));
+  gap: 6px;
   pointer-events: none;
 }
 
 .hud-panel {
   min-width: 0;
-  padding: 10px 12px;
+  padding: 7px 8px;
   border: 1px solid rgba(255, 246, 210, 0.24);
   border-radius: 8px;
   background: rgba(28, 37, 31, 0.74);
@@ -60,7 +59,7 @@ body {
 .hud-panel span {
   display: block;
   color: rgba(247, 242, 223, 0.7);
-  font-size: 0.72rem;
+  font-size: 0.58rem;
   font-weight: 700;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -68,10 +67,10 @@ body {
 
 .hud-panel strong {
   display: block;
-  margin-top: 4px;
+  margin-top: 2px;
   overflow: hidden;
   color: #fff6d2;
-  font-size: clamp(1.05rem, 2.8vw, 1.65rem);
+  font-size: 0.95rem;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -87,11 +86,11 @@ body {
 
 .storm-meter {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
+  right: auto;
+  bottom: 86px;
   left: 18px;
   display: grid;
-  grid-template-columns: minmax(120px, 360px) minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 220px);
   align-items: center;
   gap: 12px;
   pointer-events: none;
@@ -139,10 +138,10 @@ body {
   opacity: 1;
 }
 
-.restart-button {
+.pause-button {
   position: fixed;
   right: 16px;
-  top: 92px;
+  top: 16px;
   min-width: 86px;
   min-height: 40px;
   border: 1px solid rgba(255, 246, 210, 0.3);
@@ -157,39 +156,129 @@ body {
   cursor: pointer;
 }
 
-.restart-button:hover,
-.restart-button:focus-visible {
+.pause-button:hover,
+.pause-button:focus-visible {
   background: rgba(69, 103, 79, 0.86);
+  outline: none;
+}
+
+.pause-menu {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(14, 18, 16, 0.34);
+  backdrop-filter: blur(4px);
+}
+
+.pause-menu[hidden] {
+  display: none;
+}
+
+.pause-menu__panel {
+  width: min(420px, 100%);
+  padding: 18px;
+  border: 1px solid rgba(255, 246, 210, 0.28);
+  border-radius: 8px;
+  background: rgba(28, 37, 31, 0.88);
+  box-shadow: 0 18px 60px rgba(10, 14, 12, 0.42);
+}
+
+.pause-menu__header span,
+.setting-row span {
+  display: block;
+  color: rgba(247, 242, 223, 0.68);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.pause-menu__header strong {
+  display: block;
+  margin-top: 4px;
+  color: #fff6d2;
+  font-size: 1.55rem;
+  line-height: 1;
+}
+
+.setting-row {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.setting-row input[type="range"] {
+  width: 100%;
+  accent-color: #76d0a0;
+}
+
+.setting-row small {
+  display: flex;
+  justify-content: space-between;
+  color: rgba(247, 242, 223, 0.68);
+  font-weight: 700;
+}
+
+.setting-row small::before {
+  content: "Low";
+}
+
+.setting-row small::after {
+  content: "High";
+}
+
+.pause-menu__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.pause-menu__actions button {
+  min-height: 42px;
+  border: 1px solid rgba(255, 246, 210, 0.28);
+  border-radius: 8px;
+  background: rgba(69, 103, 79, 0.86);
+  color: #fff6d2;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pause-menu__actions button:hover,
+.pause-menu__actions button:focus-visible {
+  background: rgba(91, 128, 96, 0.92);
   outline: none;
 }
 
 @media (max-width: 720px) {
   .hud {
-    top: 10px;
     left: 10px;
-    right: 10px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    bottom: 10px;
+    grid-template-columns: repeat(5, minmax(44px, auto));
   }
 
   .hud-panel {
-    padding: 8px 9px;
+    padding: 6px;
   }
 
   .hud-panel strong {
-    font-size: 1rem;
+    font-size: 0.78rem;
   }
 
-  .restart-button {
-    top: auto;
+  .pause-button {
+    top: 10px;
     right: 10px;
-    bottom: 58px;
+    bottom: auto;
   }
 
   .storm-meter {
     right: 10px;
-    bottom: 10px;
+    bottom: 60px;
     left: 10px;
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(120px, 220px);
     gap: 6px;
   }
 

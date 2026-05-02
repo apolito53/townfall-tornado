@@ -1,6 +1,6 @@
 # Townfall Tornado
 
-A tiny 3D arcade destruction prototype where you steer a tornado through a town, absorb lighter objects, grow into higher categories, and work your way up to larger buildings. The current pass uses staged structural damage, visible ground scarring, a sky-connected funnel with a high cloud base, procedural town chunks that appear near the map edge, and dramatic category-based scale changes for both tornado diameter and camera distance.
+A tiny 3D arcade destruction prototype where you steer a tornado through a town, absorb lighter objects, grow into higher categories, and work your way up to larger buildings. The current pass uses staged structural damage, visible ground scarring, a sky-connected funnel descending from a wall cloud, procedural town chunks that appear near the map edge, and dramatic category-based scale changes for both tornado diameter and camera distance.
 
 ## Run
 
@@ -15,7 +15,8 @@ Then open the local Vite URL shown in the terminal.
 
 - `WASD` or arrow keys move the tornado.
 - Pointer/touch drag steers from the screen center.
-- `Restart` resets the current run.
+- `Pause` opens the storm control menu.
+- The pause menu contains `Resume`, `Restart`, and a perspective slider for low-to-high camera angle.
 
 ## Validation
 

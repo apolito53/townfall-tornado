@@ -129,6 +129,30 @@ try {
       errors.push(`${viewport.name}: camera did not zoom out enough at high category (${upgradedDiagnostics.cameraZoomScale})`);
     }
 
+    await page.locator('#pause-button').click({ force: true });
+    await page.waitForFunction(
+      () => document.querySelector('#diagnostics')?.dataset.paused === 'true',
+      undefined,
+      { timeout: 3000 },
+    );
+    const paused = await page.locator('#diagnostics').getAttribute('data-paused');
+    if (paused !== 'true') {
+      errors.push(`${viewport.name}: pause menu did not pause the game`);
+    }
+
+    const beforePerspective = await page.locator('#diagnostics').getAttribute('data-perspective-amount');
+    await page.locator('#perspective-slider').fill('100');
+    await page.waitForFunction(
+      () => document.querySelector('#diagnostics')?.dataset.perspectiveAmount === '1',
+      undefined,
+      { timeout: 3000 },
+    );
+    const afterPerspective = await page.locator('#diagnostics').getAttribute('data-perspective-amount');
+    if (beforePerspective === afterPerspective) {
+      errors.push(`${viewport.name}: perspective slider did not update diagnostics`);
+    }
+    await page.getByRole('button', { name: 'Resume' }).click();
+
     if (consoleErrors.length > 0) {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);
     }

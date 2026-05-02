@@ -89,6 +89,27 @@ export class Tornado {
     this.funnel.position.y = STORM_COLUMN_HEIGHT * 0.5;
     this.group.add(this.funnel);
 
+    this.funnelBands = [];
+    const bandMaterial = new THREE.MeshStandardMaterial({
+      color: 0xded7bd,
+      emissive: 0x302e25,
+      roughness: 1,
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+    for (let index = 0; index < 9; index += 1) {
+      const heightRatio = index / 8;
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1.6, 42, 1, true), bandMaterial);
+      band.position.y = 1.2 + heightRatio * (STORM_COLUMN_HEIGHT * 0.9);
+      band.userData.heightRatio = heightRatio;
+      band.userData.phase = Math.random() * Math.PI * 2;
+      band.userData.spin = 0.85 + Math.random() * 0.8;
+      this.group.add(band);
+      this.funnelBands.push(band);
+    }
+
     this.core = new THREE.Mesh(
       new THREE.CylinderGeometry(0.74, 0.1, STORM_COLUMN_HEIGHT * 1.04, 36, 5, true),
       this.coreMaterial,
@@ -128,27 +149,50 @@ export class Tornado {
     this.groundCloud.position.y = 0.08;
     this.group.add(this.groundCloud);
 
-    this.cloudMaterial = new THREE.MeshStandardMaterial({
-      color: 0xd6d2c0,
-      emissive: 0x3b3a31,
-      roughness: 1,
+    this.cloudBaseMaterial = new THREE.MeshBasicMaterial({
+      color: 0x4c5550,
       transparent: true,
-      opacity: 0.44,
+      opacity: 0.34,
       depthWrite: false,
+      side: THREE.DoubleSide,
     });
 
-    this.cloudShelf = [];
-    for (let index = 0; index < 8; index += 1) {
-      const cloud = new THREE.Mesh(new THREE.IcosahedronGeometry(1, 1), this.cloudMaterial);
-      const angle = (index / 8) * Math.PI * 2;
-      cloud.position.set(Math.cos(angle) * 2.2, STORM_COLUMN_HEIGHT + 1.1 + Math.random() * 1.2, Math.sin(angle) * 1.5);
-      cloud.rotation.set(Math.random(), Math.random(), Math.random());
-      cloud.scale.set(3.2 + Math.random() * 2.2, 0.55 + Math.random() * 0.26, 1.9 + Math.random() * 1.3);
-      cloud.userData.angle = angle;
-      cloud.userData.phase = Math.random() * Math.PI * 2;
-      this.group.add(cloud);
-      this.cloudShelf.push(cloud);
-    }
+    this.cloudBase = new THREE.Mesh(new THREE.CircleGeometry(1, 64), this.cloudBaseMaterial);
+    this.cloudBase.rotation.x = -Math.PI * 0.5;
+    this.cloudBase.position.y = STORM_COLUMN_HEIGHT + 0.35;
+    this.group.add(this.cloudBase);
+
+    this.wallCloudMaterial = new THREE.MeshStandardMaterial({
+      color: 0x4f5a55,
+      emissive: 0x151a18,
+      roughness: 1,
+      transparent: true,
+      opacity: 0.42,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    });
+
+    this.wallCloud = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.25, 0.42, 8.5, 72, 5, true),
+      this.wallCloudMaterial,
+    );
+    this.wallCloud.position.y = STORM_COLUMN_HEIGHT - 2.6;
+    this.group.add(this.wallCloud);
+
+    this.loweringCloud = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.92, 0.32, 4.2, 56, 3, true),
+      this.wallCloudMaterial,
+    );
+    this.loweringCloud.position.y = STORM_COLUMN_HEIGHT - 7.6;
+    this.group.add(this.loweringCloud);
+
+    this.tailCloud = new THREE.Mesh(
+      new THREE.CylinderGeometry(1, 1, 1, 42, 1, true),
+      this.wallCloudMaterial,
+    );
+    this.tailCloud.position.set(0, STORM_COLUMN_HEIGHT - 2.2, -4);
+    this.tailCloud.rotation.z = 0.1;
+    this.group.add(this.tailCloud);
 
     this.dustMaterial = new THREE.MeshStandardMaterial({
       color: 0xcbb98d,
@@ -261,12 +305,21 @@ export class Tornado {
     this.funnel.scale.set(radiusScale, 1 + (profile.category - 1) * 0.06, radiusScale);
     this.funnel.rotation.y -= dt * (1.45 + profile.category * 0.42);
     this.funnelMaterial.opacity = 0.3 + profile.category * 0.045;
+    const wobbleTime = performance.now() * 0.0015;
+    this.funnel.position.x = Math.sin(wobbleTime * 1.7) * profile.radius * 0.035;
+    this.funnel.position.z = Math.cos(wobbleTime * 1.25) * profile.radius * 0.028;
     this.core.scale.set(radiusScale * 0.82, 1 + (profile.category - 1) * 0.06, radiusScale * 0.82);
     this.core.rotation.y += dt * (1.9 + profile.category * 0.55);
     this.coreMaterial.opacity = 0.32 + profile.category * 0.035;
+    this.core.position.x = this.funnel.position.x * 0.72;
+    this.core.position.z = this.funnel.position.z * 0.72;
     this.groundCloud.rotation.z -= dt * (1.8 + profile.category * 0.35);
     this.groundCloud.scale.setScalar(profile.radius * 1.18);
     this.groundCloudMaterial.opacity = 0.3 + profile.category * 0.04;
+    this.cloudBase.rotation.z += dt * (0.018 + profile.category * 0.006);
+    this.cloudBase.position.y = STORM_COLUMN_HEIGHT + 0.9 + profile.category * 0.28;
+    this.cloudBase.scale.set(profile.radius * 2.65, profile.radius * 1.18, 1);
+    this.cloudBaseMaterial.opacity = 0.18 + profile.category * 0.018;
 
     for (let index = 0; index < this.turbulenceLayers.length; index += 1) {
       const layer = this.turbulenceLayers[index];
@@ -284,15 +337,48 @@ export class Tornado {
       layer.material.opacity = THREE.MathUtils.clamp(0.09 + profile.category * 0.023 - index * 0.004, 0.08, 0.25);
     }
 
-    for (const cloud of this.cloudShelf) {
-      cloud.userData.angle -= dt * (0.18 + profile.category * 0.04);
-      const shelfRadius = profile.radius * (0.95 + Math.sin(performance.now() * 0.001 + cloud.userData.phase) * 0.08);
-      cloud.position.x = Math.cos(cloud.userData.angle) * shelfRadius;
-      cloud.position.z = Math.sin(cloud.userData.angle) * shelfRadius * 0.72;
-      cloud.position.y = STORM_COLUMN_HEIGHT + 0.8 + profile.category * 0.55 + Math.sin(performance.now() * 0.0018 + cloud.userData.phase) * 0.45;
-      cloud.rotation.y += dt * 0.18;
-      cloud.scale.setScalar((0.9 + profile.category * 0.08) * (1.8 + Math.sin(cloud.userData.phase) * 0.12));
+    for (const band of this.funnelBands) {
+      const heightRatio = band.userData.heightRatio;
+      const radius = THREE.MathUtils.lerp(profile.radius * 0.18, profile.radius * 1.03, heightRatio);
+      const phase = wobbleTime * (1.4 + heightRatio * 0.8) + band.userData.phase;
+      const lateral = Math.sin(phase) * profile.radius * THREE.MathUtils.lerp(0.02, 0.12, heightRatio);
+      const cross = Math.cos(phase * 0.82) * profile.radius * THREE.MathUtils.lerp(0.018, 0.09, heightRatio);
+      band.position.x = lateral;
+      band.position.z = cross;
+      band.scale.set(
+        radius * (0.95 + Math.sin(phase * 1.3) * 0.07),
+        1 + profile.category * 0.05,
+        radius * (0.86 + Math.cos(phase) * 0.08),
+      );
+      band.rotation.y += dt * band.userData.spin * (heightRatio % 0.2 > 0.1 ? 1 : -1);
+      band.material.opacity = THREE.MathUtils.clamp(0.08 + profile.category * 0.012 - heightRatio * 0.018, 0.04, 0.16);
     }
+
+    const wallPhase = performance.now() * 0.0009;
+    this.wallCloud.position.y = STORM_COLUMN_HEIGHT - 2.9 + profile.category * 0.22;
+    this.wallCloud.position.x = Math.sin(wallPhase) * profile.radius * 0.08;
+    this.wallCloud.position.z = Math.cos(wallPhase * 0.8) * profile.radius * 0.04;
+    this.wallCloud.rotation.y += dt * (0.035 + profile.category * 0.006);
+    this.wallCloud.scale.set(
+      profile.radius * 1.85,
+      1.08 + profile.category * 0.1,
+      profile.radius * 0.82,
+    );
+
+    this.loweringCloud.position.y = STORM_COLUMN_HEIGHT - 8.1 + profile.category * 0.12;
+    this.loweringCloud.position.x = this.funnel.position.x * 0.65;
+    this.loweringCloud.position.z = this.funnel.position.z * 0.65;
+    this.loweringCloud.rotation.y -= dt * (0.06 + profile.category * 0.012);
+    this.loweringCloud.scale.set(
+      profile.radius * 0.85,
+      1 + profile.category * 0.04,
+      profile.radius * 0.46,
+    );
+    this.wallCloudMaterial.opacity = THREE.MathUtils.clamp(0.42 + profile.category * 0.03, 0.4, 0.58);
+
+    this.tailCloud.position.set(profile.radius * 1.55, STORM_COLUMN_HEIGHT - 2.4 + profile.category * 0.2, -profile.radius * 0.62);
+    this.tailCloud.rotation.y += dt * 0.025;
+    this.tailCloud.scale.set(profile.radius * 1.55, 0.75 + profile.category * 0.05, profile.radius * 0.22);
 
     for (const mote of this.dust) {
       mote.userData.angle -= dt * mote.userData.speed * (1 + profile.category * 0.15);

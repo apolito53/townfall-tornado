@@ -52,6 +52,8 @@ export class Game {
     this.combo = 1;
     this.comboTimer = 0;
     this.isFinished = false;
+    this.isPaused = false;
+    this.perspectiveAmount = 0.35;
     this.frame = 0;
     this.lastDiagnosticsAt = 0;
     this.currentStormProfile = this.tornado.getProfile();
@@ -85,6 +87,17 @@ export class Game {
     this.hud.flashMessage('Fresh storm front', 1.35);
   }
 
+  setPaused(isPaused) {
+    this.isPaused = isPaused;
+    document.querySelector('#pause-menu').hidden = !isPaused;
+    document.querySelector('#pause-menu').setAttribute('aria-hidden', String(!isPaused));
+    document.querySelector('#pause-button').hidden = isPaused;
+  }
+
+  setPerspective(amount) {
+    this.perspectiveAmount = THREE.MathUtils.clamp(amount, 0, 1);
+  }
+
   setupLights() {
     const hemisphere = new THREE.HemisphereLight(0xf5efd8, 0x415f4d, 2.1);
     this.scene.add(hemisphere);
@@ -116,7 +129,7 @@ export class Game {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.frame += 1;
 
-    if (!this.isFinished) {
+    if (!this.isFinished && !this.isPaused) {
       this.update(dt);
     }
 
@@ -183,20 +196,25 @@ export class Game {
   updateCamera(dt) {
     const cameraScale = getCameraScaleForCategory(this.currentStormProfile.category);
     const targetOffset = BASE_CAMERA_OFFSET.clone();
-    targetOffset.y *= cameraScale.height;
+    const perspectiveHeight = THREE.MathUtils.lerp(0.58, 1.72, this.perspectiveAmount);
+    const perspectiveDistance = THREE.MathUtils.lerp(0.86, 1.12, this.perspectiveAmount);
+    const perspectiveLookBoost = THREE.MathUtils.lerp(-5.5, 9, this.perspectiveAmount);
+    targetOffset.y *= cameraScale.height * perspectiveHeight;
+    targetOffset.z *= perspectiveDistance;
     targetOffset.z *= cameraScale.distance;
 
     const settleFactor = 1 - Math.pow(0.00003, dt);
     this.cameraOffset.lerp(targetOffset, settleFactor);
     this.cameraLookHeight = THREE.MathUtils.lerp(this.cameraLookHeight, cameraScale.lookHeight, settleFactor);
-    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, cameraScale.fov, settleFactor);
+    const targetFov = cameraScale.fov + THREE.MathUtils.lerp(-1.5, 2.5, this.perspectiveAmount);
+    this.camera.fov = THREE.MathUtils.lerp(this.camera.fov, targetFov, settleFactor);
     this.scene.fog.density = THREE.MathUtils.lerp(this.scene.fog.density, cameraScale.fogDensity, settleFactor);
     this.camera.updateProjectionMatrix();
 
     const targetPosition = this.tornado.group.position.clone().add(this.cameraOffset);
     this.camera.position.lerp(targetPosition, 1 - Math.pow(0.00001, dt));
     const lookTarget = this.tornado.group.position.clone();
-    lookTarget.y = this.cameraLookHeight;
+    lookTarget.y = Math.max(1.5, this.cameraLookHeight + perspectiveLookBoost);
     this.camera.lookAt(lookTarget);
   }
 
@@ -296,6 +314,8 @@ export class Game {
       cameraZoomScale: Number((this.cameraOffset.z / BASE_CAMERA_OFFSET.z).toFixed(3)),
       cameraFov: Number(this.camera.fov.toFixed(2)),
       fogDensity: Number(this.scene.fog.density.toFixed(4)),
+      perspectiveAmount: Number(this.perspectiveAmount.toFixed(2)),
+      paused: this.isPaused,
     };
 
     Object.assign(this.diagnosticsElement.dataset, {
@@ -311,6 +331,8 @@ export class Game {
       cameraZoomScale: String(diagnostics.cameraZoomScale),
       cameraFov: String(diagnostics.cameraFov),
       fogDensity: String(diagnostics.fogDensity),
+      perspectiveAmount: String(diagnostics.perspectiveAmount),
+      paused: String(diagnostics.paused),
     });
 
     window.__townfallDiagnostics = diagnostics;

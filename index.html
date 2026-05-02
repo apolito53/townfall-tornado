@@ -40,9 +40,29 @@
         <div id="storm-message" class="storm-message" role="status" aria-live="polite"></div>
       </section>
 
-      <button id="restart-button" class="restart-button" type="button" title="Restart storm">
-        Restart
+      <button id="pause-button" class="pause-button" type="button" title="Pause">
+        Pause
       </button>
+
+      <section id="pause-menu" class="pause-menu" hidden aria-hidden="true" aria-label="Pause menu">
+        <div class="pause-menu__panel">
+          <div class="pause-menu__header">
+            <span>Paused</span>
+            <strong>Storm Control</strong>
+          </div>
+
+          <label class="setting-row" for="perspective-slider">
+            <span>Perspective</span>
+            <input id="perspective-slider" type="range" min="0" max="100" value="35" />
+            <small>Low / High</small>
+          </label>
+
+          <div class="pause-menu__actions">
+            <button id="resume-button" type="button">Resume</button>
+            <button id="restart-button" type="button">Restart</button>
+          </div>
+        </div>
+      </section>
 
       <div id="diagnostics" hidden aria-hidden="true"></div>
     </main>
