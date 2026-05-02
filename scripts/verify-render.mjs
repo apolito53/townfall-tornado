@@ -112,6 +112,12 @@ try {
 
     const samples = await readCanvasSamples(page);
     const upgradedDiagnostics = await page.evaluate(() => window.__townfallDiagnostics);
+    const levelUi = await page.evaluate(() => ({
+      levelLabel: document.querySelector('#level-label')?.textContent ?? '',
+      levelName: document.querySelector('#level-name')?.textContent ?? '',
+      objectiveLabel: document.querySelector('#objective-label')?.textContent ?? '',
+      levelProgressTransform: document.querySelector('#level-progress-bar')?.style.transform ?? '',
+    }));
     await page.screenshot({
       path: resolve(artifactDir, `render-${viewport.name}.png`),
       fullPage: false,
@@ -127,6 +133,38 @@ try {
 
     if (upgradedDiagnostics.cameraZoomScale <= 1.15) {
       errors.push(`${viewport.name}: camera did not zoom out enough at high category (${upgradedDiagnostics.cameraZoomScale})`);
+    }
+
+    if (!levelUi.levelLabel.includes('Level') || levelUi.levelName.length === 0 || !levelUi.objectiveLabel.includes('Goal')) {
+      errors.push(`${viewport.name}: level UI did not render expected labels (${JSON.stringify(levelUi)})`);
+    }
+
+    if (!levelUi.levelProgressTransform.includes('scaleX')) {
+      errors.push(`${viewport.name}: level progress bar did not receive a scale transform`);
+    }
+
+    const levelBeforeAdvance = Number(upgradedDiagnostics.levelNumber ?? 1);
+    const forcedLevelAdvance = await page.evaluate(() => {
+      const game = window.__townfallGame;
+      if (!game || game.levelIndex >= 4) {
+        return false;
+      }
+
+      game.score = game.levelStartScore + game.currentLevel.scoreTarget;
+      const destroyCount = Math.ceil(game.town.items.length * game.currentLevel.damageTarget);
+      for (const item of game.town.items.slice(0, destroyCount)) {
+        item.destroyed = true;
+      }
+      game.checkLevelProgress(game.town.getDestroyedRatio());
+      return true;
+    });
+
+    if (forcedLevelAdvance) {
+      await page.waitForFunction(
+        (previousLevel) => Number(document.querySelector('#diagnostics')?.dataset.levelNumber ?? 1) > previousLevel,
+        levelBeforeAdvance,
+        { timeout: 5000 },
+      );
     }
 
     await page.locator('#pause-button').click({ force: true });
@@ -157,7 +195,7 @@ try {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);
     }
 
-    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)}, camera scale ${upgradedDiagnostics.cameraZoomScale}`);
+    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)}, camera scale ${upgradedDiagnostics.cameraZoomScale}, ${levelUi.levelLabel}`);
     await page.close();
   }
 } finally {

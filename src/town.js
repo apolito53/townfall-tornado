@@ -13,11 +13,17 @@ const MATERIALS = {
   sidewalk: new THREE.MeshStandardMaterial({ color: 0xc3bba6, roughness: 0.9 }),
   houseWall: new THREE.MeshStandardMaterial({ color: 0xc9d4c8, roughness: 0.82 }),
   houseAlt: new THREE.MeshStandardMaterial({ color: 0xd1b18e, roughness: 0.82 }),
-  roofRed: new THREE.MeshStandardMaterial({ color: 0x9b4c44, roughness: 0.75 }),
-  roofGreen: new THREE.MeshStandardMaterial({ color: 0x427d64, roughness: 0.75 }),
+  roofRed: new THREE.MeshStandardMaterial({ color: 0x9b4c44, roughness: 0.75, side: THREE.DoubleSide }),
+  roofGreen: new THREE.MeshStandardMaterial({ color: 0x427d64, roughness: 0.75, side: THREE.DoubleSide }),
+  roofDark: new THREE.MeshStandardMaterial({ color: 0x394f4b, roughness: 0.82, side: THREE.DoubleSide }),
   shop: new THREE.MeshStandardMaterial({ color: 0xbfc9d3, roughness: 0.74 }),
   brick: new THREE.MeshStandardMaterial({ color: 0xa15f4d, roughness: 0.88 }),
   glass: new THREE.MeshStandardMaterial({ color: 0x8fb1c2, roughness: 0.35, metalness: 0.1 }),
+  door: new THREE.MeshStandardMaterial({ color: 0x5b4535, roughness: 0.86 }),
+  trim: new THREE.MeshStandardMaterial({ color: 0xe3dec9, roughness: 0.78 }),
+  concrete: new THREE.MeshStandardMaterial({ color: 0xa9a99b, roughness: 0.92 }),
+  awning: new THREE.MeshStandardMaterial({ color: 0xb94d43, roughness: 0.78 }),
+  clockFace: new THREE.MeshStandardMaterial({ color: 0xf2e8c8, roughness: 0.68 }),
   trunk: new THREE.MeshStandardMaterial({ color: 0x745035, roughness: 0.95 }),
   leaf: new THREE.MeshStandardMaterial({ color: 0x2f7d49, roughness: 0.9 }),
   carBlue: new THREE.MeshStandardMaterial({ color: 0x3f6e99, roughness: 0.65 }),
@@ -85,27 +91,77 @@ function cylinder(radiusTop, radiusBottom, height, material, x = 0, y = 0, z = 0
   return mesh;
 }
 
-function createRoof(width, height, depth, material) {
-  const roof = new THREE.Mesh(new THREE.ConeGeometry(width * 0.72, height, 4), material);
-  roof.position.y = height * 0.5;
-  roof.rotation.y = Math.PI * 0.25;
+function createGableRoof(width, height, depth, material, x = 0, y = 0, z = 0) {
+  const halfWidth = width * 0.5;
+  const halfDepth = depth * 0.5;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+    -halfWidth, 0, -halfDepth,
+    halfWidth, 0, -halfDepth,
+    0, height, -halfDepth,
+    -halfWidth, 0, halfDepth,
+    halfWidth, 0, halfDepth,
+    0, height, halfDepth,
+  ], 3));
+  geometry.setIndex([
+    0, 1, 2,
+    3, 5, 4,
+    0, 2, 5,
+    0, 5, 3,
+    1, 4, 5,
+    1, 5, 2,
+  ]);
+  geometry.computeVertexNormals();
+
+  const roof = new THREE.Mesh(geometry, material);
+  roof.position.set(x, y, z);
   roof.castShadow = true;
+  roof.receiveShadow = true;
   return roof;
+}
+
+function addFrontWindow(group, x, y, z, width = 1.05, height = 1.05) {
+  group.add(withRole(box(width + 0.22, height + 0.22, 0.1, MATERIALS.trim, x, y - 0.11, z), 'detail'));
+  group.add(withRole(box(width, height, 0.13, MATERIALS.glass, x, y, z - 0.015), 'detail'));
+}
+
+function addSideWindow(group, x, y, z, width = 1.05, height = 1.05) {
+  group.add(withRole(box(0.1, height + 0.22, width + 0.22, MATERIALS.trim, x, y - 0.11, z), 'detail'));
+  group.add(withRole(box(0.13, height, width, MATERIALS.glass, x, y, z), 'detail'));
 }
 
 function createHouse(variant = 0) {
   const group = new THREE.Group();
   const wallMaterial = variant % 2 === 0 ? MATERIALS.houseWall : MATERIALS.houseAlt;
-  const roofMaterial = variant % 3 === 0 ? MATERIALS.roofGreen : MATERIALS.roofRed;
+  const roofMaterial = variant % 3 === 0 ? MATERIALS.roofGreen : (variant % 4 === 0 ? MATERIALS.roofDark : MATERIALS.roofRed);
+  const width = 5.7 + (variant % 3) * 0.45;
+  const depth = 5.15 + (variant % 4) * 0.34;
+  const wallHeight = 3.05 + (variant % 2) * 0.28;
+  const frontZ = -depth * 0.5 - 0.06;
+  const backZ = depth * 0.5 + 0.06;
+  const leftX = -width * 0.5 - 0.06;
+  const rightX = width * 0.5 + 0.06;
 
-  group.add(withRole(box(5.8, 3.2, 5.4, wallMaterial), 'structure'));
+  group.add(withRole(box(width, 0.34, depth, MATERIALS.concrete, 0, 0, 0), 'structure'));
+  group.add(withRole(box(width, wallHeight, depth, wallMaterial, 0, 0.28, 0), 'structure'));
 
-  const roof = createRoof(6.6, 2.2, 6.3, roofMaterial);
-  roof.position.y = 4.3;
+  const roof = createGableRoof(width + 1.25, 1.75, depth + 1.05, roofMaterial, 0, wallHeight + 0.28, 0);
+  if (variant % 2 === 1) {
+    roof.rotation.y = Math.PI * 0.5;
+  }
   group.add(withRole(roof, 'roof'));
 
-  group.add(withRole(box(1.1, 1.5, 0.12, MATERIALS.glass, -1.6, 1.1, -2.76), 'detail'));
-  group.add(withRole(box(1.1, 1.5, 0.12, MATERIALS.glass, 1.6, 1.1, -2.76), 'detail'));
+  group.add(withRole(box(1, 1.85, 0.16, MATERIALS.door, -width * 0.22, 0.36, frontZ - 0.02), 'detail'));
+  group.add(withRole(box(1.28, 0.16, 0.22, MATERIALS.trim, -width * 0.22, 2.21, frontZ - 0.03), 'detail'));
+  addFrontWindow(group, width * 0.22, 1.34, frontZ, 1.05, 1.08);
+  addFrontWindow(group, width * 0.02, 2.42, backZ, 0.9, 0.78);
+  addSideWindow(group, leftX, 1.42, -depth * 0.12, 0.92, 0.94);
+  addSideWindow(group, rightX, 1.42, depth * 0.12, 0.92, 0.94);
+
+  group.add(withRole(box(width * 0.46, 0.16, 1.35, MATERIALS.concrete, -width * 0.22, 0.02, frontZ - 0.52), 'detail'));
+  group.add(withRole(box(0.18, 1.05, 0.18, MATERIALS.trim, -width * 0.56, 0.34, frontZ - 0.58), 'detail'));
+  group.add(withRole(box(0.18, 1.05, 0.18, MATERIALS.trim, width * 0.02, 0.34, frontZ - 0.58), 'detail'));
+  group.add(withRole(box(0.52, 1.1, 0.52, MATERIALS.brick, width * 0.28, wallHeight + 1.15, depth * 0.1), 'detail'));
 
   return {
     group,
@@ -120,10 +176,28 @@ function createHouse(variant = 0) {
 function createShop(variant = 0) {
   const group = new THREE.Group();
   const bodyMaterial = variant % 2 === 0 ? MATERIALS.shop : MATERIALS.brick;
-  group.add(withRole(box(8.8, 4, 6.8, bodyMaterial), 'structure'));
-  group.add(withRole(box(9.4, 0.7, 7.4, MATERIALS.roofGreen, 0, 4, 0), 'roof'));
-  group.add(withRole(box(5.4, 1.8, 0.14, MATERIALS.glass, 0, 1.2, -3.46), 'detail'));
-  group.add(withRole(box(2.2, 1.2, 0.16, MATERIALS.sign, 0, 3.1, -3.58), 'detail'));
+  const width = 8.7 + (variant % 3) * 0.75;
+  const depth = 6.55 + (variant % 2) * 0.7;
+  const frontZ = -depth * 0.5 - 0.08;
+
+  group.add(withRole(box(width, 0.32, depth, MATERIALS.concrete), 'structure'));
+  group.add(withRole(box(width, 4, depth, bodyMaterial, 0, 0.3, 0), 'structure'));
+  group.add(withRole(box(width + 0.5, 0.62, depth + 0.55, MATERIALS.roofGreen, 0, 4.25, 0), 'roof'));
+  group.add(withRole(box(width + 0.9, 0.78, 0.44, MATERIALS.brick, 0, 4.55, frontZ + 0.04), 'roof'));
+
+  const windowWidth = (width - 2.5) / 3;
+  for (let index = 0; index < 3; index += 1) {
+    const x = -width * 0.31 + index * windowWidth;
+    group.add(withRole(box(windowWidth * 0.82, 1.75, 0.16, MATERIALS.glass, x, 1.08, frontZ - 0.02), 'detail'));
+  }
+
+  group.add(withRole(box(1.08, 2.1, 0.18, MATERIALS.door, width * 0.32, 0.42, frontZ - 0.04), 'detail'));
+  group.add(withRole(box(width * 0.86, 0.5, 0.64, MATERIALS.awning, -width * 0.02, 2.95, frontZ - 0.2), 'detail'));
+  group.add(withRole(box(2.7, 0.86, 0.18, MATERIALS.sign, -width * 0.2, 3.48, frontZ - 0.3), 'detail'));
+
+  for (const x of [-width * 0.28, width * 0.08]) {
+    group.add(withRole(box(1.15, 0.55, 1.15, MATERIALS.metal, x, 4.95, depth * 0.1), 'detail'));
+  }
 
   return {
     group,
@@ -138,11 +212,19 @@ function createShop(variant = 0) {
 function createTownHall() {
   const group = new THREE.Group();
   group.add(withRole(box(12, 5.4, 9, MATERIALS.brick), 'structure'));
-  group.add(withRole(box(13.2, 0.9, 10.2, MATERIALS.roofRed, 0, 5.35, 0), 'roof'));
+  group.add(withRole(box(13.2, 0.65, 10.2, MATERIALS.concrete, 0, 5.35, 0), 'roof'));
+  group.add(withRole(createGableRoof(13.8, 1.9, 10.8, MATERIALS.roofRed, 0, 5.95, 0), 'roof'));
   group.add(withRole(box(2.5, 7.5, 2.5, MATERIALS.brick, 0, 4.7, -0.2), 'structure'));
   group.add(withRole(cylinder(1.75, 1.75, 0.8, MATERIALS.metal, 0, 8.3, -0.2, 24), 'roof'));
-  group.add(withRole(box(1.9, 2.4, 0.15, MATERIALS.glass, -3.8, 1.8, -4.56), 'detail'));
-  group.add(withRole(box(1.9, 2.4, 0.15, MATERIALS.glass, 3.8, 1.8, -4.56), 'detail'));
+  group.add(withRole(box(1.1, 1.1, 0.16, MATERIALS.clockFace, 0, 7.15, -1.52), 'detail'));
+
+  for (const x of [-4.1, -1.4, 1.4, 4.1]) {
+    group.add(withRole(cylinder(0.18, 0.24, 3.2, MATERIALS.concrete, x, 0.1, -4.72, 12), 'detail'));
+    addFrontWindow(group, x, 2.1, -4.62, 1.2, 1.8);
+  }
+
+  group.add(withRole(box(4.1, 2.25, 0.18, MATERIALS.door, 0, 0.22, -4.7), 'detail'));
+  group.add(withRole(box(7.8, 0.24, 2.1, MATERIALS.concrete, 0, 0.02, -5.45), 'detail'));
 
   return {
     group,
@@ -687,20 +769,27 @@ export class Town {
   constructor(scene) {
     this.scene = scene;
     this.group = new THREE.Group();
+    this.levelIndex = 0;
+    this.scene.add(this.group);
+    this.resetForLevel(0);
+  }
+
+  get boundary() {
+    return this.boundarySize;
+  }
+
+  resetForLevel(levelIndex = this.levelIndex) {
+    this.levelIndex = levelIndex;
+    this.group.clear();
     this.groundDamageGroup = new THREE.Group();
     this.items = [];
     this.groundScars = [];
     this.groundScarTimer = 0;
     this.generatedChunks = new Set([chunkKey(0, 0)]);
-    this.boundarySize = TOWN_BOUNDARY;
-    this.scene.add(this.group);
+    this.boundarySize = TOWN_BOUNDARY + Math.min(4, levelIndex) * 8;
     this.createTerrain();
     this.group.add(this.groundDamageGroup);
     this.populateTown();
-  }
-
-  get boundary() {
-    return this.boundarySize;
   }
 
   restart() {
@@ -791,7 +880,7 @@ export class Town {
   createProceduralChunk(chunkX, chunkZ) {
     const originX = chunkX * CHUNK_SIZE;
     const originZ = chunkZ * CHUNK_SIZE;
-    const random = mulberry32(hashChunk(chunkX, chunkZ));
+    const random = mulberry32(hashChunk(chunkX + this.levelIndex * 97, chunkZ - this.levelIndex * 131));
 
     this.createTerrainPatch(originX, originZ);
     this.populateProceduralChunk(originX, originZ, random);
@@ -820,8 +909,9 @@ export class Town {
   }
 
   populateProceduralChunk(originX, originZ, random) {
-    const localLots = [-25, -14, 14, 25];
+    const localLots = this.levelIndex >= 3 ? [-27, -15, 15, 27] : [-25, -14, 14, 25];
     let variant = Math.floor(random() * 1000);
+    const shopThreshold = Math.max(0.7, 0.82 - this.levelIndex * 0.035);
 
     for (const localX of localLots) {
       for (const localZ of localLots) {
@@ -835,7 +925,7 @@ export class Town {
           0,
           originZ + localZ + (random() - 0.5) * 3.2,
         );
-        const config = roll > 0.82 ? createShop(variant) : createHouse(variant);
+        const config = roll > shopThreshold ? createShop(variant) : createHouse(variant);
         this.addItem(config, position, Math.floor(random() * 4) * Math.PI * 0.5);
         variant += 1;
       }
@@ -922,14 +1012,19 @@ export class Town {
 
   populateTown() {
     let variant = 0;
+    const level = this.levelIndex;
+    const buildableCoords = level >= 3
+      ? [-42, -30, -18, -10, 10, 18, 30, 42]
+      : BUILDABLE_COORDS;
+    const shopFrequency = Math.max(3, 7 - level);
 
-    for (const x of BUILDABLE_COORDS) {
-      for (const z of BUILDABLE_COORDS) {
+    for (const x of buildableCoords) {
+      for (const z of buildableCoords) {
         if (Math.abs(x) < 12 && Math.abs(z) < 12) {
           continue;
         }
 
-        const selector = Math.abs((x * 13 + z * 7 + variant) % 7);
+        const selector = Math.abs((x * 13 + z * 7 + variant + level * 11) % shopFrequency);
         const config = selector === 0 ? createShop(variant) : createHouse(variant);
         this.addItem(config, new THREE.Vector3(x, 0, z), ((x + z) % 4) * Math.PI * 0.5);
         variant += 1;
@@ -939,7 +1034,15 @@ export class Town {
     this.addItem(createTownHall(), new THREE.Vector3(0, 0, 22), Math.PI);
     this.addItem(createWaterTower(), new THREE.Vector3(35, 0, -36), 0);
 
-    for (let index = 0; index < 28; index += 1) {
+    if (level >= 2) {
+      this.addItem(createTownHall(), new THREE.Vector3(-34, 0, 36), Math.PI * 0.25);
+    }
+
+    if (level >= 3) {
+      this.addItem(createWaterTower(), new THREE.Vector3(-42, 0, -38), 0);
+    }
+
+    for (let index = 0; index < 28 + level * 7; index += 1) {
       const angle = index * 1.618;
       const radius = 18 + (index % 5) * 7;
       const x = Math.cos(angle) * radius;
@@ -950,8 +1053,9 @@ export class Town {
       this.addItem(createTree(), new THREE.Vector3(x, 0, z), angle);
     }
 
-    for (let index = 0; index < 16; index += 1) {
-      const alongRoad = -44 + index * 6.2;
+    const carCount = 16 + level * 5;
+    for (let index = 0; index < carCount; index += 1) {
+      const alongRoad = -44 + (index / Math.max(1, carCount - 1)) * 88;
       const side = index % 2 === 0 ? -7.3 : 7.3;
       const car = createCar(index);
       const rotateOnNorthRoad = index % 3 === 0;
@@ -962,17 +1066,18 @@ export class Town {
       );
     }
 
-    for (let index = 0; index < 24; index += 1) {
+    for (let index = 0; index < 24 + level * 5; index += 1) {
       const x = -46 + (index % 8) * 13;
-      const z = index < 12 ? -46 : 46;
+      const z = index < 12 + level * 2 ? -46 : 46;
       const fence = createFence(4 + (index % 3));
       this.addItem(fence, new THREE.Vector3(x, 0, z), index % 2 === 0 ? 0 : Math.PI * 0.5);
     }
 
-    for (let index = 0; index < 12; index += 1) {
+    const signCount = 12 + level * 3;
+    for (let index = 0; index < signCount; index += 1) {
       const sign = createSign();
       const x = index % 2 === 0 ? -10.8 : 10.8;
-      const z = -42 + index * 7.6;
+      const z = -42 + (index / Math.max(1, signCount - 1)) * 84;
       this.addItem(sign, new THREE.Vector3(x, 0, z), index % 2 === 0 ? -0.2 : 0.2);
     }
   }

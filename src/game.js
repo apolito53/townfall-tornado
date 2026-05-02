@@ -4,7 +4,39 @@ import { Tornado } from './tornado.js';
 import { Town } from './town.js';
 import { Hud } from './ui.js';
 
-const GAME_DURATION = 180;
+const LEVEL_COMPLETE_DELAY = 2.35;
+const LEVELS = [
+  {
+    name: 'First Touchdown',
+    timeLimit: 110,
+    scoreTarget: 1400,
+    damageTarget: 0.06,
+  },
+  {
+    name: 'Subdivision',
+    timeLimit: 130,
+    scoreTarget: 5200,
+    damageTarget: 0.12,
+  },
+  {
+    name: 'Main Street',
+    timeLimit: 150,
+    scoreTarget: 12000,
+    damageTarget: 0.18,
+  },
+  {
+    name: 'Civic Core',
+    timeLimit: 165,
+    scoreTarget: 24000,
+    damageTarget: 0.25,
+  },
+  {
+    name: 'Wedge Outbreak',
+    timeLimit: 180,
+    scoreTarget: 42000,
+    damageTarget: 0.34,
+  },
+];
 const BASE_CAMERA_OFFSET = new THREE.Vector3(0, 23, 76);
 const CAMERA_SCALE_BY_CATEGORY = [
   { distance: 1, height: 1, lookHeight: 5, fov: 58, fogDensity: 0.0058 },
@@ -47,8 +79,13 @@ export class Game {
     this.tornado = new Tornado(this.scene);
     this.town = new Town(this.scene);
     this.debris = [];
+    this.levelIndex = 0;
+    this.levelStartScore = 0;
+    this.levelStartMass = 0;
+    this.levelTransitionTimer = 0;
+    this.isLevelTransitioning = false;
     this.score = 0;
-    this.remainingTime = GAME_DURATION;
+    this.remainingTime = this.currentLevel.timeLimit;
     this.combo = 1;
     this.comboTimer = 0;
     this.isFinished = false;
@@ -65,26 +102,72 @@ export class Game {
     window.addEventListener('resize', () => this.resize());
   }
 
+  get currentLevel() {
+    return LEVELS[this.levelIndex];
+  }
+
   start() {
     this.clock.start();
     this.renderer.setAnimationLoop(() => this.tick());
   }
 
   restart() {
+    this.restartRun();
+  }
+
+  restartRun() {
+    this.levelIndex = 0;
+    this.levelStartScore = 0;
+    this.levelStartMass = 0;
     this.score = 0;
-    this.remainingTime = GAME_DURATION;
+    this.startLevel(0, {
+      carryScore: false,
+      carryMass: false,
+      message: 'Level 1: First Touchdown',
+    });
+  }
+
+  restartLevel() {
+    this.score = this.levelStartScore;
+    this.startLevel(this.levelIndex, {
+      carryScore: true,
+      carryMass: false,
+      massOverride: this.levelStartMass,
+      message: `Retry: ${this.currentLevel.name}`,
+    });
+  }
+
+  startLevel(levelIndex, {
+    carryScore = true,
+    carryMass = true,
+    massOverride = null,
+    message = null,
+  } = {}) {
+    const previousMass = this.tornado.mass;
+    this.levelIndex = THREE.MathUtils.clamp(levelIndex, 0, LEVELS.length - 1);
+    const startingMass = massOverride ?? (carryMass ? previousMass : 0);
+
+    if (!carryScore) {
+      this.score = 0;
+    }
+
+    this.levelStartScore = this.score;
+    this.levelStartMass = startingMass;
+    this.remainingTime = this.currentLevel.timeLimit;
     this.combo = 1;
     this.comboTimer = 0;
     this.isFinished = false;
-    this.tornado.restart();
-    this.town.restart();
+    this.isLevelTransitioning = false;
+    this.levelTransitionTimer = 0;
+    this.tornado.restart(startingMass);
+    this.town.resetForLevel(this.levelIndex);
     this.currentStormProfile = this.tornado.getProfile();
     this.cameraOffset.copy(BASE_CAMERA_OFFSET);
     this.cameraLookHeight = CAMERA_SCALE_BY_CATEGORY[0].lookHeight;
     this.camera.fov = CAMERA_SCALE_BY_CATEGORY[0].fov;
     this.camera.updateProjectionMatrix();
     this.clearDebris();
-    this.hud.flashMessage('Fresh storm front', 1.35);
+    this.hud.flashMessage(message ?? `Level ${this.levelIndex + 1}: ${this.currentLevel.name}`, 1.8);
   }
 
   setPaused(isPaused) {
@@ -129,7 +212,14 @@ export class Game {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.frame += 1;
 
-    if (!this.isFinished && !this.isPaused) {
+    if (this.isLevelTransitioning && !this.isPaused) {
+      this.levelTransitionTimer -= dt;
+      if (this.levelTransitionTimer <= 0) {
+        this.advanceToNextLevel();
+      }
+    }
+
+    if (!this.isFinished && !this.isPaused && !this.isLevelTransitioning) {
       this.update(dt);
     }
 
@@ -163,18 +253,65 @@ export class Game {
     }
 
     const destroyedRatio = this.town.getDestroyedRatio();
-    if (destroyedRatio >= 1 || this.remainingTime <= 0) {
-      this.isFinished = true;
-      this.hud.flashMessage(destroyedRatio >= 1 ? 'Townfall complete' : 'Storm dissipated', 8);
-    }
+    this.checkLevelProgress(destroyedRatio);
 
     this.hud.update({
+      levelNumber: this.levelIndex + 1,
+      levelCount: LEVELS.length,
+      levelName: this.currentLevel.name,
       category: profile.category,
       mass: profile.mass,
       score: this.score,
+      levelScore: this.score - this.levelStartScore,
+      scoreTarget: this.currentLevel.scoreTarget,
       destroyedRatio,
+      damageTarget: this.currentLevel.damageTarget,
       remainingTime: this.remainingTime,
+      isLevelTransitioning: this.isLevelTransitioning,
+      isFinished: this.isFinished,
     }, dt);
+  }
+
+  checkLevelProgress(destroyedRatio) {
+    if (this.isFinished || this.isLevelTransitioning) {
+      return;
+    }
+
+    const levelScore = this.score - this.levelStartScore;
+    const metScoreTarget = levelScore >= this.currentLevel.scoreTarget;
+    const metDamageTarget = destroyedRatio >= this.currentLevel.damageTarget;
+
+    if (metScoreTarget && metDamageTarget) {
+      this.completeCurrentLevel();
+      return;
+    }
+
+    if (this.remainingTime <= 0) {
+      this.isFinished = true;
+      this.hud.flashMessage(`Level failed: ${this.currentLevel.name}`, 8);
+    }
+  }
+
+  completeCurrentLevel() {
+    const isFinalLevel = this.levelIndex >= LEVELS.length - 1;
+
+    if (isFinalLevel) {
+      this.isFinished = true;
+      this.hud.flashMessage('Outbreak mastered', 8);
+      return;
+    }
+
+    this.isLevelTransitioning = true;
+    this.levelTransitionTimer = LEVEL_COMPLETE_DELAY;
+    this.hud.flashMessage(`Level ${this.levelIndex + 1} cleared`, LEVEL_COMPLETE_DELAY);
+  }
+
+  advanceToNextLevel() {
+    this.startLevel(this.levelIndex + 1, {
+      carryScore: true,
+      carryMass: true,
+      message: `Level ${this.levelIndex + 2}: ${LEVELS[this.levelIndex + 1].name}`,
+    });
   }
 
   handleAbsorbedItems(items) {
@@ -316,6 +453,13 @@ export class Game {
       fogDensity: Number(this.scene.fog.density.toFixed(4)),
       perspectiveAmount: Number(this.perspectiveAmount.toFixed(2)),
       paused: this.isPaused,
+      levelNumber: this.levelIndex + 1,
+      levelName: this.currentLevel.name,
+      levelScore: Math.round(this.score - this.levelStartScore),
+      levelScoreTarget: this.currentLevel.scoreTarget,
+      levelDamageTarget: this.currentLevel.damageTarget,
+      levelTransitioning: this.isLevelTransitioning,
+      finished: this.isFinished,
     };
 
     Object.assign(this.diagnosticsElement.dataset, {
@@ -333,6 +477,13 @@ export class Game {
       fogDensity: String(diagnostics.fogDensity),
       perspectiveAmount: String(diagnostics.perspectiveAmount),
       paused: String(diagnostics.paused),
+      levelNumber: String(diagnostics.levelNumber),
+      levelName: diagnostics.levelName,
+      levelScore: String(diagnostics.levelScore),
+      levelScoreTarget: String(diagnostics.levelScoreTarget),
+      levelDamageTarget: String(diagnostics.levelDamageTarget),
+      levelTransitioning: String(diagnostics.levelTransitioning),
+      finished: String(diagnostics.finished),
     });
 
     window.__townfallDiagnostics = diagnostics;

@@ -10,6 +10,19 @@
     <main id="app" aria-label="Townfall Tornado">
       <canvas id="game-canvas" aria-label="Townfall Tornado game canvas"></canvas>
 
+      <section class="level-tracker" aria-label="Level objective">
+        <div class="level-tracker__header">
+          <span id="level-label">Level 1 / 5</span>
+          <strong id="level-name">First Touchdown</strong>
+        </div>
+        <div class="level-tracker__objective">
+          <span id="objective-label">Goal 0 / 1,400 + 0% / 6%</span>
+          <div class="level-tracker__bar" aria-hidden="true">
+            <div id="level-progress-bar" class="level-tracker__fill"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="hud" aria-label="Storm readout">
         <div class="hud-panel hud-panel--primary">
           <span>Storm</span>
@@ -59,7 +72,8 @@
 
           <div class="pause-menu__actions">
             <button id="resume-button" type="button">Resume</button>
-            <button id="restart-button" type="button">Restart</button>
+            <button id="retry-level-button" type="button">Retry Level</button>
+            <button id="restart-button" type="button">Restart Run</button>
           </div>
         </div>
       </section>

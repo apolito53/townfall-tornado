@@ -150,6 +150,66 @@ function createStormBaseTexture() {
   });
 }
 
+function createFunnelTexture(seed, {
+  top = 'rgba(72, 82, 74, 0.32)',
+  middle = 'rgba(176, 161, 111, 0.46)',
+  bottom = 'rgba(93, 72, 46, 0.62)',
+} = {}) {
+  const random = createSeededRandom(seed);
+
+  const texture = makeCanvasTexture(512, 1024, (context, width, height) => {
+    const bodyGradient = context.createLinearGradient(0, 0, 0, height);
+    bodyGradient.addColorStop(0, top);
+    bodyGradient.addColorStop(0.55, middle);
+    bodyGradient.addColorStop(1, bottom);
+    context.fillStyle = bodyGradient;
+    context.fillRect(0, 0, width, height);
+
+    for (let index = 0; index < 72; index += 1) {
+      const startX = random() * width;
+      const widthJitter = 7 + random() * 34;
+      const alpha = 0.05 + random() * 0.16;
+      const shade = random() > 0.48 ? 245 : 42;
+      const strokeGradient = context.createLinearGradient(startX, 0, startX + widthJitter, height);
+      strokeGradient.addColorStop(0, `rgba(${shade}, ${shade}, ${shade}, 0)`);
+      strokeGradient.addColorStop(0.5, `rgba(${shade}, ${shade}, ${shade}, ${alpha})`);
+      strokeGradient.addColorStop(1, `rgba(${shade}, ${shade}, ${shade}, 0)`);
+
+      context.beginPath();
+      context.moveTo(startX, height + 40);
+      for (let step = 0; step <= 6; step += 1) {
+        const y = height - step * (height / 5);
+        const x = startX
+          + Math.sin(step * 0.9 + random() * 3.2) * (18 + random() * 42)
+          + step * (random() - 0.5) * 22;
+        context.lineTo(x, y);
+      }
+      context.lineWidth = widthJitter;
+      context.strokeStyle = strokeGradient;
+      context.globalAlpha = 0.55 + random() * 0.45;
+      context.stroke();
+      context.globalAlpha = 1;
+    }
+
+    for (let index = 0; index < 52; index += 1) {
+      const x = random() * width;
+      const y = random() * height;
+      const radiusX = 16 + random() * 80;
+      const radiusY = 8 + random() * 42;
+      context.beginPath();
+      context.ellipse(x, y, radiusX, radiusY, random() * Math.PI, 0, Math.PI * 2);
+      context.fillStyle = `rgba(238, 226, 184, ${0.035 + random() * 0.07})`;
+      context.fill();
+    }
+
+    featherTextureEdges(context, width, height, { top: 0.04, bottom: 0.04, sides: 0.08 });
+  });
+
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  return texture;
+}
+
 function getCategoryProfile(mass) {
   let profile = CATEGORY_THRESHOLDS[0];
   for (const threshold of CATEGORY_THRESHOLDS) {
@@ -170,8 +230,16 @@ export class Tornado {
     this.group.position.copy(this.position);
     this.scene.add(this.group);
 
+    this.outerFunnelTexture = createFunnelTexture(11831);
+    this.coreFunnelTexture = createFunnelTexture(24017, {
+      top: 'rgba(28, 38, 36, 0.5)',
+      middle: 'rgba(57, 62, 50, 0.56)',
+      bottom: 'rgba(54, 42, 30, 0.72)',
+    });
+
     this.funnelMaterial = new THREE.MeshStandardMaterial({
       color: 0xd8d4bd,
+      map: this.outerFunnelTexture,
       emissive: 0x3b3b31,
       roughness: 0.75,
       metalness: 0,
@@ -183,6 +251,7 @@ export class Tornado {
 
     this.coreMaterial = new THREE.MeshStandardMaterial({
       color: 0x3e4b45,
+      map: this.coreFunnelTexture,
       emissive: 0x121917,
       roughness: 0.95,
       transparent: true,
@@ -228,9 +297,38 @@ export class Tornado {
     this.funnel.position.y = STORM_COLUMN_HEIGHT * 0.5;
     this.group.add(this.funnel);
 
+    this.funnelSections = [];
+    const sectionGeometry = new THREE.CylinderGeometry(1, 1, 1, 44, 1, true);
+    for (let index = 0; index < 12; index += 1) {
+      const heightRatio = 0.04 + index / 11 * 0.92;
+      const sectionMaterial = new THREE.MeshStandardMaterial({
+        color: index % 2 === 0 ? 0xd2c398 : 0x67736a,
+        map: createFunnelTexture(5100 + index * 173),
+        emissive: 0x211f19,
+        roughness: 1,
+        transparent: true,
+        opacity: 0.1,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      const section = new THREE.Mesh(sectionGeometry, sectionMaterial);
+      section.position.y = heightRatio * STORM_COLUMN_HEIGHT;
+      section.userData.heightRatio = heightRatio;
+      section.userData.phase = Math.random() * Math.PI * 2;
+      section.userData.spin = 0.45 + Math.random() * 0.95;
+      section.userData.heightScale = 7.6 + Math.random() * 6.4;
+      this.group.add(section);
+      this.funnelSections.push(section);
+    }
+
     this.funnelBands = [];
     const bandMaterial = new THREE.MeshStandardMaterial({
       color: 0xded7bd,
+      map: createFunnelTexture(9301, {
+        top: 'rgba(95, 102, 88, 0.2)',
+        middle: 'rgba(198, 183, 129, 0.28)',
+        bottom: 'rgba(132, 101, 62, 0.3)',
+      }),
       emissive: 0x302e25,
       roughness: 1,
       transparent: true,
@@ -379,10 +477,10 @@ export class Tornado {
     }
   }
 
-  restart() {
+  restart(mass = 0) {
     this.position.copy(START_POSITION);
-    this.mass = 0;
-    this.lastCategory = 1;
+    this.mass = mass;
+    this.lastCategory = getCategoryProfile(mass).category;
     this.group.position.copy(this.position);
   }
 
@@ -427,13 +525,17 @@ export class Tornado {
     const radiusScale = profile.radius / 3.2;
     this.funnel.scale.set(radiusScale, 1 + (profile.category - 1) * 0.06, radiusScale);
     this.funnel.rotation.y -= dt * (1.45 + profile.category * 0.42);
-    this.funnelMaterial.opacity = 0.3 + profile.category * 0.045;
+    this.funnelMaterial.opacity = 0.24 + profile.category * 0.038;
+    this.outerFunnelTexture.offset.x = (this.outerFunnelTexture.offset.x + dt * (0.035 + profile.category * 0.01)) % 1;
+    this.outerFunnelTexture.offset.y = (this.outerFunnelTexture.offset.y - dt * (0.08 + profile.category * 0.015)) % 1;
     const wobbleTime = performance.now() * 0.0015;
     this.funnel.position.x = Math.sin(wobbleTime * 1.7) * profile.radius * 0.035;
     this.funnel.position.z = Math.cos(wobbleTime * 1.25) * profile.radius * 0.028;
     this.core.scale.set(radiusScale * 0.82, 1 + (profile.category - 1) * 0.06, radiusScale * 0.82);
     this.core.rotation.y += dt * (1.9 + profile.category * 0.55);
-    this.coreMaterial.opacity = 0.32 + profile.category * 0.035;
+    this.coreMaterial.opacity = 0.34 + profile.category * 0.035;
+    this.coreFunnelTexture.offset.x = (this.coreFunnelTexture.offset.x - dt * (0.045 + profile.category * 0.012)) % 1;
+    this.coreFunnelTexture.offset.y = (this.coreFunnelTexture.offset.y - dt * (0.05 + profile.category * 0.012)) % 1;
     this.core.position.x = this.funnel.position.x * 0.72;
     this.core.position.z = this.funnel.position.z * 0.72;
     this.groundCloud.rotation.z -= dt * (1.8 + profile.category * 0.35);
@@ -459,6 +561,25 @@ export class Tornado {
       1,
     );
     this.stormBaseMaterial.opacity = THREE.MathUtils.clamp(0.52 + profile.category * 0.04, 0.52, 0.76);
+
+    for (const section of this.funnelSections) {
+      const heightRatio = section.userData.heightRatio;
+      const phase = wobbleTime * (1.15 + heightRatio * 1.4) + section.userData.phase;
+      const radius = THREE.MathUtils.lerp(profile.radius * 0.2, profile.radius * 1.08, heightRatio);
+      const upperWobble = THREE.MathUtils.lerp(0.03, 0.18, heightRatio);
+      section.position.y = heightRatio * STORM_COLUMN_HEIGHT;
+      section.position.x = Math.sin(phase) * profile.radius * upperWobble + this.funnel.position.x * (0.25 + heightRatio * 0.5);
+      section.position.z = Math.cos(phase * 0.74) * profile.radius * upperWobble * 0.78 + this.funnel.position.z * (0.25 + heightRatio * 0.5);
+      section.scale.set(
+        radius * (0.74 + Math.sin(phase * 1.7) * 0.11),
+        section.userData.heightScale * (1 + profile.category * 0.04),
+        radius * (0.66 + Math.cos(phase * 1.3) * 0.12),
+      );
+      section.rotation.y += dt * (section.userData.spin + profile.category * 0.16) * (heightRatio > 0.5 ? -1 : 1);
+      section.material.opacity = THREE.MathUtils.clamp(0.06 + profile.category * 0.015 + heightRatio * 0.03, 0.06, 0.18);
+      section.material.map.offset.y = (section.material.map.offset.y - dt * (0.04 + heightRatio * 0.06)) % 1;
+      section.material.map.offset.x = (section.material.map.offset.x + dt * (0.018 + heightRatio * 0.025)) % 1;
+    }
 
     for (let index = 0; index < this.turbulenceLayers.length; index += 1) {
       const layer = this.turbulenceLayers[index];

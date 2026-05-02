@@ -13,6 +13,10 @@ function formatTime(seconds) {
 
 export class Hud {
   constructor() {
+    this.levelLabel = document.querySelector('#level-label');
+    this.levelName = document.querySelector('#level-name');
+    this.objectiveLabel = document.querySelector('#objective-label');
+    this.levelProgressBar = document.querySelector('#level-progress-bar');
     this.categoryLabel = document.querySelector('#category-label');
     this.massLabel = document.querySelector('#mass-label');
     this.scoreLabel = document.querySelector('#score-label');
@@ -29,6 +33,20 @@ export class Hud {
   }
 
   update(state, dt) {
+    const levelScore = Math.max(0, state.levelScore ?? 0);
+    const scoreTarget = Math.max(1, state.scoreTarget ?? 1);
+    const damageTarget = Math.max(0.01, state.damageTarget ?? 0.01);
+    const damagePercent = Math.round(state.destroyedRatio * 100);
+    const targetPercent = Math.round(damageTarget * 100);
+    const scoreProgress = levelScore / scoreTarget;
+    const damageProgress = state.destroyedRatio / damageTarget;
+    const objectiveProgress = Math.min(1, Math.min(scoreProgress, damageProgress));
+
+    this.levelLabel.textContent = `Level ${state.levelNumber} / ${state.levelCount}`;
+    this.levelName.textContent = state.levelName;
+    this.objectiveLabel.textContent = `Goal ${formatNumber(levelScore)} / ${formatNumber(scoreTarget)} + ${damagePercent}% / ${targetPercent}%`;
+    this.levelProgressBar.style.transform = `scaleX(${Math.min(1, Math.max(0, objectiveProgress))})`;
+
     this.categoryLabel.textContent = `CAT ${state.category}`;
     this.massLabel.textContent = formatNumber(state.mass);
     this.scoreLabel.textContent = formatNumber(state.score);

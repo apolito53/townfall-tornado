@@ -10,7 +10,12 @@ const game = new Game({
 window.__townfallGame = game;
 
 document.querySelector('#restart-button').addEventListener('click', () => {
-  game.restart();
+  game.restartRun();
+  game.setPaused(false);
+});
+
+document.querySelector('#retry-level-button').addEventListener('click', () => {
+  game.restartLevel();
   game.setPaused(false);
 });
 

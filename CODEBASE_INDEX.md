@@ -9,20 +9,20 @@
 
 ## Main Files
 
-- `src/game.js` owns scene setup, renderer, pause state, perspective slider state, category-scaled lower oblique camera follow with adaptive fog, loop timing, score, timer, debris bursts, and render diagnostics.
-- `src/tornado.js` owns tornado growth stats, category thresholds, dramatic diameter scaling, taller wiggly sky-connected funnel visuals, procedural storm-sky textures, wall cloud curtains, dust, and airborne debris.
-- `src/town.js` owns terrain, roads, destructible town props, staged structural damage, pressure bursts, persistent ground scars, procedural town chunks, lift thresholds, suction response, and destroyed ratio.
+- `src/game.js` owns scene setup, renderer, pause state, perspective slider state, level progression, category-scaled lower oblique camera follow with adaptive fog, loop timing, score, timer, debris bursts, and render diagnostics.
+- `src/tornado.js` owns tornado growth stats, category thresholds, dramatic diameter scaling, taller wiggly sky-connected funnel visuals, procedural smoky funnel/storm-sky textures, wall cloud curtains, dust, and airborne debris.
+- `src/town.js` owns terrain, roads, more detailed low-poly building models, destructible town props, staged structural damage, pressure bursts, persistent ground scars, procedural town chunks, lift thresholds, suction response, and destroyed ratio.
 - `src/input.js` translates keyboard and pointer/touch steering into a normalized movement vector.
-- `src/ui.js` updates the HUD, growth bar, timer, and short storm messages.
-- `scripts/verify-render.mjs` runs a Playwright smoke test against a live dev server, saves screenshots, and verifies high-category radius/camera scaling through the local `window.__townfallGame` hook.
+- `src/ui.js` updates the level tracker, HUD, growth bar, timer, and short storm messages.
+- `scripts/verify-render.mjs` runs a Playwright smoke test against a live dev server, saves screenshots, and verifies high-category radius/camera scaling plus level UI through the local `window.__townfallGame` hook.
 
 ## Common Change Targets
 
-- Adjust tornado feel in `src/tornado.js`: category thresholds, diameter `radius`, `pullRadius`, `liftLimit`, `speed`, and `pullStrength`.
-- Add or tune destructible object types in `src/town.js`: creation helpers plus `massRequired`, `points`, `growth`, `radius`, staged damage roles, and procedural chunk placement.
-- Change scoring, timer, combo, pause behavior, camera angle/zoom/fog composition, or diagnostics in `src/game.js`.
+- Adjust tornado feel in `src/tornado.js`: category thresholds, diameter `radius`, `pullRadius`, `liftLimit`, `speed`, `pullStrength`, smoky funnel texture, and stacked funnel-section wobble.
+- Add or tune destructible object types and building detail in `src/town.js`: creation helpers plus `massRequired`, `points`, `growth`, `radius`, staged damage roles, level density, and procedural chunk placement.
+- Change levels, scoring, timer, combo, pause behavior, camera angle/zoom/fog composition, or diagnostics in `src/game.js`.
 - Change visual layout and responsive HUD behavior in `src/styles.css`.
-- Pause menu markup lives in `index.html`, with compact HUD and pause overlay styling in `src/styles.css`.
+- Level tracker and pause menu markup live in `index.html`, with compact HUD, level tracker, and pause overlay styling in `src/styles.css`.
 
 ## Validation Commands
 
