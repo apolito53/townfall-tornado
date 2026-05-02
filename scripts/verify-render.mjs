@@ -155,6 +155,22 @@ try {
       errors.push(`${viewport.name}: expected wider starting town footprint, got ${upgradedDiagnostics.generatedChunks} chunks`);
     }
 
+    if (upgradedDiagnostics.totalItems <= 0) {
+      errors.push(`${viewport.name}: town item diagnostics did not report generated destructibles`);
+    }
+
+    if (upgradedDiagnostics.simulatedItems <= 0 || upgradedDiagnostics.simulatedItems >= upgradedDiagnostics.totalItems) {
+      errors.push(`${viewport.name}: spatial simulation culling was not active (${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems})`);
+    }
+
+    if (upgradedDiagnostics.visibleParts <= 0 || upgradedDiagnostics.visibleParts >= upgradedDiagnostics.totalParts) {
+      errors.push(`${viewport.name}: render LOD budget was not active (${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts})`);
+    }
+
+    if (upgradedDiagnostics.pixelRatio > 1.35) {
+      errors.push(`${viewport.name}: renderer pixel ratio was not capped (${upgradedDiagnostics.pixelRatio})`);
+    }
+
     if (upgradedDiagnostics.postProcessing !== true) {
       errors.push(`${viewport.name}: post-processing diagnostics were not enabled`);
     }
@@ -223,7 +239,7 @@ try {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);
     }
 
-    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, chunks ${upgradedDiagnostics.generatedChunks}, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
+    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, chunks ${upgradedDiagnostics.generatedChunks}, simulated ${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems}, visible parts ${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts}, draw calls ${upgradedDiagnostics.drawCalls}, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
     await page.close();
   }
 } finally {

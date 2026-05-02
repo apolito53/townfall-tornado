@@ -7,6 +7,10 @@ const CHUNK_SIZE = 72;
 const GENERATION_MARGIN = 26;
 const INITIAL_CHUNK_RADIUS = 2;
 const EDGE_GENERATION_RADIUS = 2;
+const SIMULATION_CELL_SIZE = 24;
+const MAX_INTERACTION_RADIUS = 12;
+const DETAIL_LOD_RADIUS_BY_CATEGORY = [64, 76, 88, 100, 116];
+const MINOR_PROP_RADIUS_BY_CATEGORY = [76, 88, 104, 122, 146];
 
 const MATERIALS = {
   grass: new THREE.MeshStandardMaterial({ color: 0x5c8f5c, roughness: 0.95 }),
@@ -52,11 +56,43 @@ const MATERIALS = {
 
 function withRole(mesh, role) {
   mesh.userData.damageRole = role;
+  if (role === 'detail') {
+    mesh.castShadow = false;
+  }
   return mesh;
 }
 
 function chunkKey(chunkX, chunkZ) {
   return `${chunkX},${chunkZ}`;
+}
+
+function simulationCellKey(cellX, cellZ) {
+  return `${cellX},${cellZ}`;
+}
+
+function simulationCellForPosition(position) {
+  return {
+    x: Math.floor(position.x / SIMULATION_CELL_SIZE),
+    z: Math.floor(position.z / SIMULATION_CELL_SIZE),
+  };
+}
+
+function createSimulationStats() {
+  return {
+    totalItems: 0,
+    candidateItems: 0,
+    activeItems: 0,
+    simulatedItems: 0,
+  };
+}
+
+function createRenderBudgetStats() {
+  return {
+    visibleItems: 0,
+    totalItems: 0,
+    visibleParts: 0,
+    totalParts: 0,
+  };
 }
 
 function hashChunk(chunkX, chunkZ) {
@@ -80,7 +116,7 @@ function mulberry32(seed) {
 function box(width, height, depth, material, x = 0, y = 0, z = 0) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
   mesh.position.set(x, y + height * 0.5, z);
-  mesh.castShadow = true;
+  mesh.castShadow = height > 0.25;
   mesh.receiveShadow = true;
   return mesh;
 }
@@ -88,7 +124,7 @@ function box(width, height, depth, material, x = 0, y = 0, z = 0) {
 function cylinder(radiusTop, radiusBottom, height, material, x = 0, y = 0, z = 0, segments = 18) {
   const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radiusTop, radiusBottom, height, segments), material);
   mesh.position.set(x, y + height * 0.5, z);
-  mesh.castShadow = true;
+  mesh.castShadow = height > 0.25 && Math.max(radiusTop, radiusBottom) > 0.12;
   mesh.receiveShadow = true;
   return mesh;
 }
@@ -389,6 +425,7 @@ class Destructible {
         originalRotation: child.rotation.clone(),
         originalScale: child.scale.clone(),
         originalVisible: child.visible,
+        damageVisible: child.visible,
         size,
       });
     });
@@ -412,6 +449,7 @@ class Destructible {
     this.removeGeneratedPieces();
 
     for (const part of this.parts) {
+      part.damageVisible = part.originalVisible;
       part.mesh.visible = part.originalVisible;
       part.mesh.position.copy(part.originalPosition);
       part.mesh.rotation.copy(part.originalRotation);
@@ -420,6 +458,7 @@ class Destructible {
   }
 
   update(stormProfile, stormPosition, dt) {
+    this.group.visible = true;
     this.updateGeneratedPieces(dt);
 
     if (this.destroyed) {
@@ -559,11 +598,12 @@ class Destructible {
       ? ['detail', 'wheel']
       : ['roof', 'canopy', 'detail'];
     const candidates = this.parts
-      .filter((part) => part.mesh.visible && targetRoles.includes(part.role))
+      .filter((part) => part.damageVisible && targetRoles.includes(part.role))
       .sort((a, b) => b.originalPosition.y - a.originalPosition.y);
     const partsToBreak = candidates.slice(0, Math.max(1, Math.min(candidates.length, stage)));
 
     for (const part of partsToBreak) {
+      part.damageVisible = false;
       part.mesh.visible = false;
       this.createFragmentsFromPart(part, 2 + stage * 2, stormPosition);
     }
@@ -655,6 +695,14 @@ class Destructible {
         }
       }
     }
+  }
+
+  needsOngoingSimulation() {
+    if (this.isLifted) {
+      return true;
+    }
+
+    return this.generatedPieces.some((piece) => piece.userData.dynamic);
   }
 
   removeGeneratedPieces() {
@@ -765,6 +813,49 @@ class Destructible {
     this.group.rotation.x += inward.z * shake * dt * 8;
     this.group.rotation.z -= inward.x * shake * dt * 8;
   }
+
+  applyRenderBudget(focusPosition, category) {
+    const distanceX = this.group.position.x - focusPosition.x;
+    const distanceZ = this.group.position.z - focusPosition.z;
+    const distanceSq = distanceX * distanceX + distanceZ * distanceZ;
+    const categoryIndex = Math.min(DETAIL_LOD_RADIUS_BY_CATEGORY.length - 1, Math.max(0, category - 1));
+    const detailRadius = DETAIL_LOD_RADIUS_BY_CATEGORY[categoryIndex];
+    const minorPropRadius = MINOR_PROP_RADIUS_BY_CATEGORY[categoryIndex];
+    const active = this.needsOngoingSimulation();
+    const isMinorProp = !this.isStructural;
+    const showWholeItem = !isMinorProp || active || distanceSq <= minorPropRadius * minorPropRadius;
+    const showFineDetail = active || distanceSq <= detailRadius * detailRadius;
+
+    this.group.visible = showWholeItem;
+
+    if (!this.model.visible) {
+      return {
+        visibleItems: this.group.visible ? 1 : 0,
+        visibleParts: 0,
+        totalParts: this.parts.length,
+      };
+    }
+
+    let visibleParts = 0;
+    for (const part of this.parts) {
+      const visible = Boolean(
+        this.group.visible
+        && part.originalVisible
+        && part.damageVisible
+        && (showFineDetail || part.role !== 'detail')
+      );
+      part.mesh.visible = visible;
+      if (visible) {
+        visibleParts += 1;
+      }
+    }
+
+    return {
+      visibleItems: this.group.visible ? 1 : 0,
+      visibleParts,
+      totalParts: this.parts.length,
+    };
+  }
 }
 
 export class Town {
@@ -785,6 +876,10 @@ export class Town {
     this.group.clear();
     this.groundDamageGroup = new THREE.Group();
     this.items = [];
+    this.itemBuckets = new Map();
+    this.activeItems = new Set();
+    this.lastUpdateStats = createSimulationStats();
+    this.lastRenderBudgetStats = createRenderBudgetStats();
     this.groundScars = [];
     this.groundScarTimer = 0;
     this.generatedChunks = new Set([chunkKey(0, 0)]);
@@ -802,23 +897,71 @@ export class Town {
     for (const item of this.items) {
       item.reset();
     }
+    this.activeItems.clear();
+    this.lastUpdateStats = createSimulationStats();
+    this.lastRenderBudgetStats = createRenderBudgetStats();
     this.clearGroundDamage();
   }
 
   update(stormProfile, stormPosition, dt) {
     const absorbedItems = [];
-    this.ensureGeneratedAround(stormPosition);
     this.applyStormGroundDamage(stormPosition, stormProfile, dt);
 
-    for (const item of this.items) {
+    const candidateItems = this.collectNearbyItems(stormPosition, stormProfile.pullRadius + MAX_INTERACTION_RADIUS);
+    const itemsToUpdate = new Set([...candidateItems, ...this.activeItems]);
+    this.activeItems.clear();
+
+    for (const item of itemsToUpdate) {
       const absorbed = item.update(stormProfile, stormPosition, dt);
       if (absorbed) {
         absorbedItems.push(absorbed);
         this.addCollapseScar(absorbed.group.position, absorbed.radius, absorbed.isStructural ? 1 : 0.45);
       }
+
+      if (item.needsOngoingSimulation()) {
+        this.activeItems.add(item);
+      }
     }
 
+    this.lastUpdateStats = {
+      totalItems: this.items.length,
+      candidateItems: candidateItems.size,
+      activeItems: this.activeItems.size,
+      simulatedItems: itemsToUpdate.size,
+    };
+
     return absorbedItems;
+  }
+
+  collectNearbyItems(position, radius) {
+    const centerCell = simulationCellForPosition(position);
+    const cellRadius = Math.ceil((radius + SIMULATION_CELL_SIZE) / SIMULATION_CELL_SIZE);
+    const nearbyItems = new Set();
+
+    for (let dz = -cellRadius; dz <= cellRadius; dz += 1) {
+      for (let dx = -cellRadius; dx <= cellRadius; dx += 1) {
+        const bucket = this.itemBuckets.get(simulationCellKey(centerCell.x + dx, centerCell.z + dz));
+        if (!bucket) {
+          continue;
+        }
+
+        for (const item of bucket) {
+          if (item.destroyed && !item.needsOngoingSimulation()) {
+            continue;
+          }
+
+          const distanceX = item.group.position.x - position.x;
+          const distanceZ = item.group.position.z - position.z;
+          const interactionRadius = radius + item.radius;
+
+          if (distanceX * distanceX + distanceZ * distanceZ <= interactionRadius * interactionRadius) {
+            nearbyItems.add(item);
+          }
+        }
+      }
+    }
+
+    return nearbyItems;
   }
 
   ensureGeneratedAround(position) {
@@ -826,22 +969,25 @@ export class Town {
       || Math.abs(position.z) > this.boundarySize - GENERATION_MARGIN;
 
     if (!nearCurrentEdge) {
-      return;
+      return false;
     }
 
     const centerChunkX = Math.round(position.x / CHUNK_SIZE);
     const centerChunkZ = Math.round(position.z / CHUNK_SIZE);
 
-    this.generateChunkNeighborhood(centerChunkX, centerChunkZ, EDGE_GENERATION_RADIUS);
+    const generatedCount = this.generateChunkNeighborhood(centerChunkX, centerChunkZ, EDGE_GENERATION_RADIUS);
 
     const furthestChunk = Math.max(
       Math.abs(centerChunkX) + EDGE_GENERATION_RADIUS,
       Math.abs(centerChunkZ) + EDGE_GENERATION_RADIUS,
     );
     this.boundarySize = Math.max(this.boundarySize, furthestChunk * CHUNK_SIZE + CHUNK_SIZE * 0.62);
+    return generatedCount > 0;
   }
 
   generateChunkNeighborhood(centerChunkX, centerChunkZ, radius) {
+    let generatedCount = 0;
+
     for (let dz = -radius; dz <= radius; dz += 1) {
       for (let dx = -radius; dx <= radius; dx += 1) {
         const chunkX = centerChunkX + dx;
@@ -854,13 +1000,30 @@ export class Town {
 
         this.generatedChunks.add(key);
         this.createProceduralChunk(chunkX, chunkZ);
+        generatedCount += 1;
       }
     }
+
+    return generatedCount;
   }
 
   getDestroyedRatio() {
     const destroyed = this.items.filter((item) => item.destroyed).length;
     return destroyed / this.items.length;
+  }
+
+  updateRenderBudget(focusPosition, category) {
+    const stats = createRenderBudgetStats();
+    stats.totalItems = this.items.length;
+
+    for (const item of this.items) {
+      const itemStats = item.applyRenderBudget(focusPosition, category);
+      stats.visibleItems += itemStats.visibleItems;
+      stats.visibleParts += itemStats.visibleParts;
+      stats.totalParts += itemStats.totalParts;
+    }
+
+    this.lastRenderBudgetStats = stats;
   }
 
   createTerrain() {
@@ -1098,6 +1261,18 @@ export class Town {
   addItem(config, position, rotation = 0) {
     const item = new Destructible(config, position, rotation);
     this.items.push(item);
+    this.registerItem(item);
     this.group.add(item.group);
+  }
+
+  registerItem(item) {
+    const cell = simulationCellForPosition(item.basePosition);
+    const key = simulationCellKey(cell.x, cell.z);
+
+    if (!this.itemBuckets.has(key)) {
+      this.itemBuckets.set(key, []);
+    }
+
+    this.itemBuckets.get(key).push(item);
   }
 }

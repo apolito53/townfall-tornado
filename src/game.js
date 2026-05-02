@@ -11,6 +11,8 @@ import { Town } from './town.js';
 import { Hud } from './ui.js';
 
 const LEVEL_COMPLETE_DELAY = 2.35;
+const MAX_RENDER_PIXEL_RATIO = 1.35;
+const SHADOW_MAP_SIZE = 1024;
 const LEVELS = [
   {
     name: 'First Touchdown',
@@ -60,6 +62,7 @@ export class Game {
   constructor({ canvas, diagnosticsElement }) {
     this.canvas = canvas;
     this.diagnosticsElement = diagnosticsElement;
+    this.pixelDiagnosticsEnabled = new URLSearchParams(window.location.search).has('pixelDiagnostics');
     this.clock = new THREE.Clock();
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x7f8d8a);
@@ -76,12 +79,15 @@ export class Game {
       preserveDrawingBuffer: true,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_RENDER_PIXEL_RATIO));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.82;
+    this.renderer.info.autoReset = false;
+    this.pendingShadowRefresh = false;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.setupPostProcessing();
 
     this.input = new InputController(canvas);
@@ -106,12 +112,14 @@ export class Game {
     this.weatherTime = 0;
     this.lightningTimer = 4.8;
     this.lightningEnergy = 0;
+    this.renderBudgetTimer = 0;
     this.currentStormProfile = this.tornado.getProfile();
     this.cameraOffset = BASE_CAMERA_OFFSET.clone();
     this.cameraLookHeight = CAMERA_SCALE_BY_CATEGORY[0].lookHeight;
 
     this.setupLights();
     this.resize();
+    this.queueShadowRefresh();
     window.addEventListener('resize', () => this.resize());
   }
 
@@ -174,7 +182,10 @@ export class Game {
     this.levelTransitionTimer = 0;
     this.tornado.restart(startingMass);
     this.town.resetForLevel(this.levelIndex);
+    this.queueShadowRefresh();
     this.currentStormProfile = this.tornado.getProfile();
+    this.renderBudgetTimer = 0;
+    this.town.updateRenderBudget(this.tornado.position, this.currentStormProfile.category);
     this.cameraOffset.copy(BASE_CAMERA_OFFSET);
     this.cameraLookHeight = CAMERA_SCALE_BY_CATEGORY[0].lookHeight;
     this.camera.fov = CAMERA_SCALE_BY_CATEGORY[0].fov;
@@ -217,7 +228,7 @@ export class Game {
     sun.shadow.camera.right = 78;
     sun.shadow.camera.top = 78;
     sun.shadow.camera.bottom = -78;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
     this.scene.add(sun);
 
     const stormGlow = new THREE.PointLight(0xa7ffe0, 1.4, 40);
@@ -239,6 +250,10 @@ export class Game {
     this.stormAtmospherePass.uniforms.resolution.value.set(width, height);
   }
 
+  queueShadowRefresh() {
+    this.pendingShadowRefresh = true;
+  }
+
   tick() {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.frame += 1;
@@ -257,7 +272,11 @@ export class Game {
     this.updateCamera(dt);
     this.updateDebris(dt);
     this.updateWeatherShaders(dt);
+    this.renderer.info.reset();
+    this.renderer.shadowMap.needsUpdate = this.pendingShadowRefresh;
+    this.pendingShadowRefresh = false;
     this.composer.render();
+    this.renderer.shadowMap.needsUpdate = false;
     this.collectDiagnostics();
   }
 
@@ -265,9 +284,20 @@ export class Game {
     this.remainingTime = Math.max(0, this.remainingTime - dt);
 
     const inputVector = this.input.getMoveVector();
-    this.town.ensureGeneratedAround(this.tornado.position);
+    let generatedTownChunks = this.town.ensureGeneratedAround(this.tornado.position);
     const { profile, categoryChanged } = this.tornado.update(dt, inputVector, this.town.boundary);
+    generatedTownChunks = this.town.ensureGeneratedAround(this.tornado.position) || generatedTownChunks;
+    if (generatedTownChunks) {
+      this.queueShadowRefresh();
+    }
+
     this.currentStormProfile = profile;
+    this.renderBudgetTimer -= dt;
+    if (this.renderBudgetTimer <= 0) {
+      this.town.updateRenderBudget(this.tornado.position, profile.category);
+      this.renderBudgetTimer = 0.32;
+    }
+
     if (categoryChanged) {
       this.hud.flashMessage(`Category ${profile.category}`, 1.7);
     }
@@ -470,7 +500,7 @@ export class Game {
 
     this.lastDiagnosticsAt = now;
 
-    const gl = this.renderer.getContext();
+    const renderInfo = this.renderer.info.render;
     const samplePoints = [
       [0.5, 0.5],
       [0.25, 0.35],
@@ -478,32 +508,49 @@ export class Game {
       [0.35, 0.68],
       [0.65, 0.68],
     ];
-    let visibleSamples = 0;
+    let visibleSamples = samplePoints.length;
     let colorVariance = 0;
-    const pixel = new Uint8Array(4);
 
-    for (const [xRatio, yRatio] of samplePoints) {
-      const x = Math.floor(gl.drawingBufferWidth * xRatio);
-      const y = Math.floor(gl.drawingBufferHeight * yRatio);
-      gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-      const luma = pixel[0] + pixel[1] + pixel[2];
-      const spread = Math.max(pixel[0], pixel[1], pixel[2]) - Math.min(pixel[0], pixel[1], pixel[2]);
-      if (pixel[3] > 0 && luma > 45) {
-        visibleSamples += 1;
+    if (this.pixelDiagnosticsEnabled) {
+      const gl = this.renderer.getContext();
+      const pixel = new Uint8Array(4);
+      visibleSamples = 0;
+
+      for (const [xRatio, yRatio] of samplePoints) {
+        const x = Math.floor(gl.drawingBufferWidth * xRatio);
+        const y = Math.floor(gl.drawingBufferHeight * yRatio);
+        gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+        const luma = pixel[0] + pixel[1] + pixel[2];
+        const spread = Math.max(pixel[0], pixel[1], pixel[2]) - Math.min(pixel[0], pixel[1], pixel[2]);
+        if (pixel[3] > 0 && luma > 45) {
+          visibleSamples += 1;
+        }
+        colorVariance += spread;
       }
-      colorVariance += spread;
     }
 
+    const townStats = this.town.lastUpdateStats;
+    const renderBudgetStats = this.town.lastRenderBudgetStats;
     const diagnostics = {
-      renderOk: visibleSamples >= 3 && this.renderer.info.render.calls > 0,
-      sampledPixels: `${visibleSamples}/${samplePoints.length}`,
+      renderOk: visibleSamples >= 3 && renderInfo.calls > 0,
+      sampledPixels: this.pixelDiagnosticsEnabled ? `${visibleSamples}/${samplePoints.length}` : 'skipped',
       colorVariance,
       frame: this.frame,
       tornadoX: Number(this.tornado.position.x.toFixed(2)),
       tornadoZ: Number(this.tornado.position.z.toFixed(2)),
       debrisCount: this.debris.length,
       generatedChunks: this.town.generatedChunks.size,
+      totalItems: townStats.totalItems,
+      candidateItems: townStats.candidateItems,
+      activeItems: townStats.activeItems,
+      simulatedItems: townStats.simulatedItems,
+      visibleItems: renderBudgetStats.visibleItems,
+      visibleParts: renderBudgetStats.visibleParts,
+      totalParts: renderBudgetStats.totalParts,
       groundScars: this.town.groundScars.length,
+      drawCalls: renderInfo.calls,
+      triangles: renderInfo.triangles,
+      pixelRatio: this.renderer.getPixelRatio(),
       cameraZoomScale: Number((this.cameraOffset.z / BASE_CAMERA_OFFSET.z).toFixed(3)),
       cameraFov: Number(this.camera.fov.toFixed(2)),
       fogDensity: Number(this.scene.fog.density.toFixed(4)),
@@ -531,7 +578,17 @@ export class Game {
       tornadoZ: String(diagnostics.tornadoZ),
       debrisCount: String(diagnostics.debrisCount),
       generatedChunks: String(diagnostics.generatedChunks),
+      totalItems: String(diagnostics.totalItems),
+      candidateItems: String(diagnostics.candidateItems),
+      activeItems: String(diagnostics.activeItems),
+      simulatedItems: String(diagnostics.simulatedItems),
+      visibleItems: String(diagnostics.visibleItems),
+      visibleParts: String(diagnostics.visibleParts),
+      totalParts: String(diagnostics.totalParts),
       groundScars: String(diagnostics.groundScars),
+      drawCalls: String(diagnostics.drawCalls),
+      triangles: String(diagnostics.triangles),
+      pixelRatio: String(diagnostics.pixelRatio),
       cameraZoomScale: String(diagnostics.cameraZoomScale),
       cameraFov: String(diagnostics.cameraFov),
       fogDensity: String(diagnostics.fogDensity),
