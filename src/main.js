@@ -9,8 +9,16 @@ const game = new Game({
 // Local prototype hook for browser-side tuning and render smoke checks.
 window.__townfallGame = game;
 
+document.querySelector('#levels-mode-button').addEventListener('click', () => {
+  game.startLevels();
+});
+
+document.querySelector('#endless-mode-button').addEventListener('click', () => {
+  game.startEndless();
+});
+
 document.querySelector('#restart-button').addEventListener('click', () => {
-  game.restartRun();
+  game.restartCurrentMode();
   game.setPaused(false);
 });
 
@@ -25,6 +33,10 @@ document.querySelector('#pause-button').addEventListener('click', () => {
 
 document.querySelector('#resume-button').addEventListener('click', () => {
   game.setPaused(false);
+});
+
+document.querySelector('#mode-select-button').addEventListener('click', () => {
+  game.showStartScreen();
 });
 
 document.querySelector('#perspective-slider').addEventListener('input', (event) => {

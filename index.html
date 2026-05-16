@@ -10,6 +10,26 @@
     <main id="app" aria-label="Townfall Tornado">
       <canvas id="game-canvas" aria-label="Townfall Tornado game canvas"></canvas>
 
+      <section id="start-screen" class="start-screen" aria-label="Mode select">
+        <div class="start-screen__panel">
+          <div class="start-screen__header">
+            <span>Townfall</span>
+            <strong>Tornado</strong>
+          </div>
+
+          <div class="mode-grid" aria-label="Choose mode">
+            <button id="levels-mode-button" class="mode-button" type="button">
+              <span>Levels</span>
+              <strong>Objective Run</strong>
+            </button>
+            <button id="endless-mode-button" class="mode-button" type="button">
+              <span>Endless</span>
+              <strong>Free Roam</strong>
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section class="level-tracker" aria-label="Level objective">
         <div class="level-tracker__header">
           <span id="level-label">Level 1 / 5</span>
@@ -74,6 +94,7 @@
             <button id="resume-button" type="button">Resume</button>
             <button id="retry-level-button" type="button">Retry Level</button>
             <button id="restart-button" type="button">Restart Run</button>
+            <button id="mode-select-button" type="button">Mode Select</button>
           </div>
         </div>
       </section>

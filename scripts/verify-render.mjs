@@ -87,6 +87,19 @@ try {
       timeout: 10000,
     });
 
+    const startScreenVisible = await page.locator('#start-screen').isVisible();
+    if (!startScreenVisible) {
+      errors.push(`${viewport.name}: start screen was not visible before choosing a mode`);
+    }
+
+    await page.getByRole('button', { name: /Levels/i }).click();
+    await page.waitForFunction(
+      () => window.__townfallDiagnostics?.gameMode === 'levels'
+        && window.__townfallDiagnostics?.awaitingStart === false,
+      undefined,
+      { timeout: 5000 },
+    );
+
     const beforeMove = await page.evaluate(() => window.__townfallDiagnostics);
     await page.keyboard.down('KeyD');
     await page.waitForTimeout(500);
@@ -194,6 +207,10 @@ try {
       errors.push(`${viewport.name}: level advanced before the minimum duration gate (${JSON.stringify(upgradedDiagnostics)})`);
     }
 
+    if (upgradedDiagnostics.gameMode !== 'levels' || upgradedDiagnostics.awaitingStart === true) {
+      errors.push(`${viewport.name}: levels mode diagnostics were not active (${JSON.stringify(upgradedDiagnostics)})`);
+    }
+
     if (upgradedDiagnostics.visibleParts <= 0 || upgradedDiagnostics.visibleParts >= upgradedDiagnostics.totalParts) {
       errors.push(`${viewport.name}: render LOD budget was not active (${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts})`);
     }
@@ -288,6 +305,49 @@ try {
       errors.push(`${viewport.name}: perspective slider did not update diagnostics`);
     }
     await page.getByRole('button', { name: 'Resume' }).click();
+
+    await page.locator('#pause-button').click({ force: true });
+    await page.getByRole('button', { name: 'Mode Select' }).click();
+    await page.waitForFunction(() => document.querySelector('#start-screen')?.hidden === false, undefined, {
+      timeout: 3000,
+    });
+    await page.getByRole('button', { name: /Endless/i }).click();
+    await page.waitForFunction(
+      () => window.__townfallDiagnostics?.gameMode === 'endless'
+        && window.__townfallDiagnostics?.awaitingStart === false,
+      undefined,
+      { timeout: 5000 },
+    );
+    const endlessUi = await page.evaluate(() => ({
+      levelLabel: document.querySelector('#level-label')?.textContent ?? '',
+      levelName: document.querySelector('#level-name')?.textContent ?? '',
+      objectiveLabel: document.querySelector('#objective-label')?.textContent ?? '',
+      timeLabel: document.querySelector('#time-label')?.textContent ?? '',
+      diagnostics: window.__townfallDiagnostics,
+    }));
+
+    if (endlessUi.levelLabel !== 'Endless' || endlessUi.levelName !== 'Free Roam' || endlessUi.timeLabel !== '∞') {
+      errors.push(`${viewport.name}: endless UI did not render expected labels (${JSON.stringify(endlessUi)})`);
+    }
+
+    const endlessStillRunning = await page.evaluate(() => {
+      const game = window.__townfallGame;
+      game.score = 999999;
+      game.levelElapsed = 999;
+      for (const item of game.town.items.slice(0, Math.ceil(game.town.items.length * 0.9))) {
+        item.destroyed = true;
+      }
+      game.checkLevelProgress(game.town.getDestroyedRatio());
+      return {
+        gameMode: game.gameMode,
+        levelTransitioning: game.isLevelTransitioning,
+        finished: game.isFinished,
+      };
+    });
+
+    if (endlessStillRunning.gameMode !== 'endless' || endlessStillRunning.levelTransitioning || endlessStillRunning.finished) {
+      errors.push(`${viewport.name}: endless mode still triggered level/final state (${JSON.stringify(endlessStillRunning)})`);
+    }
 
     if (consoleErrors.length > 0) {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);

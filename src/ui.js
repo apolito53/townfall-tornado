@@ -5,6 +5,10 @@ function formatNumber(value) {
 }
 
 function formatTime(seconds) {
+  if (!Number.isFinite(seconds)) {
+    return '∞';
+  }
+
   const clampedSeconds = Math.max(0, Math.ceil(seconds));
   const minutes = Math.floor(clampedSeconds / 60);
   const remainingSeconds = clampedSeconds % 60;
@@ -42,10 +46,17 @@ export class Hud {
     const damageProgress = state.destroyedRatio / damageTarget;
     const objectiveProgress = Math.min(1, Math.min(scoreProgress, damageProgress));
 
-    this.levelLabel.textContent = `Level ${state.levelNumber} / ${state.levelCount}`;
-    this.levelName.textContent = state.levelName;
-    this.objectiveLabel.textContent = `Goal ${formatNumber(levelScore)} / ${formatNumber(scoreTarget)} + ${damagePercent}% / ${targetPercent}%`;
-    this.levelProgressBar.style.transform = `scaleX(${Math.min(1, Math.max(0, objectiveProgress))})`;
+    if (state.mode === 'endless') {
+      this.levelLabel.textContent = 'Endless';
+      this.levelName.textContent = 'Free Roam';
+      this.objectiveLabel.textContent = `Score ${formatNumber(state.score)} + Town ${damagePercent}%`;
+      this.levelProgressBar.style.transform = `scaleX(${Math.min(1, Math.max(0, state.destroyedRatio))})`;
+    } else {
+      this.levelLabel.textContent = `Level ${state.levelNumber} / ${state.levelCount}`;
+      this.levelName.textContent = state.levelName;
+      this.objectiveLabel.textContent = `Goal ${formatNumber(levelScore)} / ${formatNumber(scoreTarget)} + ${damagePercent}% / ${targetPercent}%`;
+      this.levelProgressBar.style.transform = `scaleX(${Math.min(1, Math.max(0, objectiveProgress))})`;
+    }
 
     this.categoryLabel.textContent = `CAT ${state.category}`;
     this.massLabel.textContent = formatNumber(state.mass);

@@ -24,6 +24,10 @@ const DEBRIS_MATERIALS = {
   tree: new THREE.MeshStandardMaterial({ color: 0x4d8a4f, roughness: 0.88 }),
   structure: new THREE.MeshStandardMaterial({ color: 0xd7c3a3, roughness: 0.88 }),
 };
+const GAME_MODES = {
+  LEVELS: 'levels',
+  ENDLESS: 'endless',
+};
 const LEVELS = [
   {
     name: 'First Touchdown',
@@ -75,6 +79,12 @@ function getCategoryIndex(category) {
 
 export class Game {
   constructor({ canvas, diagnosticsElement }) {
+    this.appElement = document.querySelector('#app');
+    this.startScreenElement = document.querySelector('#start-screen');
+    this.pauseMenuElement = document.querySelector('#pause-menu');
+    this.pauseButtonElement = document.querySelector('#pause-button');
+    this.retryLevelButtonElement = document.querySelector('#retry-level-button');
+    this.restartButtonElement = document.querySelector('#restart-button');
     this.canvas = canvas;
     this.diagnosticsElement = diagnosticsElement;
     this.pixelDiagnosticsEnabled = new URLSearchParams(window.location.search).has('pixelDiagnostics');
@@ -122,6 +132,8 @@ export class Game {
     this.remainingTime = this.currentLevel.timeLimit;
     this.combo = 1;
     this.comboTimer = 0;
+    this.gameMode = null;
+    this.isAwaitingStart = true;
     this.isFinished = false;
     this.isPaused = false;
     this.perspectiveAmount = 0.35;
@@ -138,6 +150,7 @@ export class Game {
     this.setupLights();
     this.resize();
     this.queueShadowRefresh();
+    this.syncGameShell();
     window.addEventListener('resize', () => this.resize());
   }
 
@@ -151,10 +164,53 @@ export class Game {
   }
 
   restart() {
+    this.restartCurrentMode();
+  }
+
+  startLevels() {
+    this.gameMode = GAME_MODES.LEVELS;
+    this.isAwaitingStart = false;
     this.restartRun();
   }
 
+  startEndless() {
+    this.gameMode = GAME_MODES.ENDLESS;
+    this.isAwaitingStart = false;
+    this.levelIndex = 0;
+    this.levelStartScore = 0;
+    this.levelStartMass = 0;
+    this.score = 0;
+    this.startLevel(0, {
+      carryScore: false,
+      carryMass: false,
+      message: 'Endless Free Roam',
+    });
+    this.remainingTime = Infinity;
+    this.syncGameShell();
+  }
+
+  restartCurrentMode() {
+    if (this.gameMode === GAME_MODES.ENDLESS) {
+      this.startEndless();
+      return;
+    }
+
+    this.restartRun();
+  }
+
+  showStartScreen() {
+    this.isAwaitingStart = true;
+    this.gameMode = null;
+    this.isPaused = false;
+    this.isFinished = false;
+    this.isLevelTransitioning = false;
+    this.levelTransitionTimer = 0;
+    this.syncGameShell();
+  }
+
   restartRun() {
+    this.gameMode = GAME_MODES.LEVELS;
+    this.isAwaitingStart = false;
     this.levelIndex = 0;
     this.levelStartScore = 0;
     this.levelStartMass = 0;
@@ -164,9 +220,15 @@ export class Game {
       carryMass: false,
       message: 'Level 1: First Touchdown',
     });
+    this.syncGameShell();
   }
 
   restartLevel() {
+    if (this.gameMode === GAME_MODES.ENDLESS) {
+      this.startEndless();
+      return;
+    }
+
     this.score = this.levelStartScore;
     this.startLevel(this.levelIndex, {
       carryScore: true,
@@ -212,17 +274,51 @@ export class Game {
     this.pendingAbsorbedItems = [];
     this.clearDebris();
     this.hud.flashMessage(message ?? `Level ${this.levelIndex + 1}: ${this.currentLevel.name}`, 1.8);
+    this.syncGameShell();
   }
 
   setPaused(isPaused) {
+    if (this.isAwaitingStart) {
+      this.isPaused = false;
+      this.syncGameShell();
+      return;
+    }
+
     this.isPaused = isPaused;
-    document.querySelector('#pause-menu').hidden = !isPaused;
-    document.querySelector('#pause-menu').setAttribute('aria-hidden', String(!isPaused));
-    document.querySelector('#pause-button').hidden = isPaused;
+    this.syncGameShell();
   }
 
   setPerspective(amount) {
     this.perspectiveAmount = THREE.MathUtils.clamp(amount, 0, 1);
+  }
+
+  syncGameShell() {
+    this.appElement?.classList.toggle('is-starting', this.isAwaitingStart);
+
+    if (this.startScreenElement) {
+      this.startScreenElement.hidden = !this.isAwaitingStart;
+      this.startScreenElement.setAttribute('aria-hidden', String(!this.isAwaitingStart));
+    }
+
+    if (this.pauseMenuElement) {
+      const showPauseMenu = this.isPaused && !this.isAwaitingStart;
+      this.pauseMenuElement.hidden = !showPauseMenu;
+      this.pauseMenuElement.setAttribute('aria-hidden', String(!showPauseMenu));
+    }
+
+    if (this.pauseButtonElement) {
+      this.pauseButtonElement.hidden = this.isAwaitingStart || this.isPaused;
+    }
+
+    const isEndless = this.gameMode === GAME_MODES.ENDLESS;
+    if (this.retryLevelButtonElement) {
+      this.retryLevelButtonElement.hidden = isEndless;
+      this.retryLevelButtonElement.setAttribute('aria-hidden', String(isEndless));
+    }
+
+    if (this.restartButtonElement) {
+      this.restartButtonElement.textContent = isEndless ? 'Restart Endless' : 'Restart Run';
+    }
   }
 
   setupPostProcessing() {
@@ -278,14 +374,14 @@ export class Game {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.frame += 1;
 
-    if (this.isLevelTransitioning && !this.isPaused) {
+    if (this.isLevelTransitioning && !this.isPaused && !this.isAwaitingStart) {
       this.levelTransitionTimer -= dt;
       if (this.levelTransitionTimer <= 0) {
         this.advanceToNextLevel();
       }
     }
 
-    if (!this.isFinished && !this.isPaused && !this.isLevelTransitioning) {
+    if (!this.isAwaitingStart && !this.isFinished && !this.isPaused && !this.isLevelTransitioning) {
       this.update(dt);
     }
 
@@ -303,7 +399,9 @@ export class Game {
   update(dt) {
     this.levelElapsed += dt;
     this.frameDebrisBudget = MAX_DEBRIS_PER_FRAME;
-    this.remainingTime = Math.max(0, this.remainingTime - dt);
+    this.remainingTime = this.gameMode === GAME_MODES.ENDLESS
+      ? Infinity
+      : Math.max(0, this.remainingTime - dt);
 
     const inputVector = this.input.getMoveVector();
     let generatedTownChunks = this.town.ensureGeneratedAround(this.tornado.position);
@@ -342,6 +440,7 @@ export class Game {
     this.checkLevelProgress(destroyedRatio, levelTargets);
 
     this.hud.update({
+      mode: this.gameMode,
       levelNumber: this.levelIndex + 1,
       levelCount: LEVELS.length,
       levelName: this.currentLevel.name,
@@ -359,6 +458,10 @@ export class Game {
   }
 
   checkLevelProgress(destroyedRatio, levelTargets = this.getLevelTargets()) {
+    if (this.gameMode !== GAME_MODES.LEVELS) {
+      return;
+    }
+
     if (this.isFinished || this.isLevelTransitioning) {
       return;
     }
@@ -384,6 +487,10 @@ export class Game {
   }
 
   getLevelTargets() {
+    if (this.gameMode === GAME_MODES.ENDLESS) {
+      return { scoreTarget: Infinity, damageTarget: 1 };
+    }
+
     const profile = this.currentStormProfile ?? this.tornado.getProfile();
     const categoryIndex = getCategoryIndex(profile.category);
     const overgrowth = THREE.MathUtils.clamp((profile.radius - 36) / 36, 0, 5);
@@ -614,6 +721,8 @@ export class Game {
       cameraFov: Number(this.camera.fov.toFixed(2)),
       fogDensity: Number(this.scene.fog.density.toFixed(4)),
       perspectiveAmount: Number(this.perspectiveAmount.toFixed(2)),
+      gameMode: this.gameMode,
+      awaitingStart: this.isAwaitingStart,
       paused: this.isPaused,
       levelNumber: this.levelIndex + 1,
       levelName: this.currentLevel.name,
@@ -622,6 +731,7 @@ export class Game {
       levelDamageTarget: levelTargets.damageTarget,
       levelElapsed: Number(this.levelElapsed.toFixed(2)),
       minimumLevelDuration: this.getMinimumLevelDuration(),
+      remainingTime: Number.isFinite(this.remainingTime) ? Number(this.remainingTime.toFixed(2)) : Infinity,
       levelTransitioning: this.isLevelTransitioning,
       finished: this.isFinished,
       postProcessing: true,
@@ -659,6 +769,8 @@ export class Game {
       cameraFov: String(diagnostics.cameraFov),
       fogDensity: String(diagnostics.fogDensity),
       perspectiveAmount: String(diagnostics.perspectiveAmount),
+      gameMode: String(diagnostics.gameMode),
+      awaitingStart: String(diagnostics.awaitingStart),
       paused: String(diagnostics.paused),
       levelNumber: String(diagnostics.levelNumber),
       levelName: diagnostics.levelName,
@@ -667,6 +779,7 @@ export class Game {
       levelDamageTarget: String(diagnostics.levelDamageTarget),
       levelElapsed: String(diagnostics.levelElapsed),
       minimumLevelDuration: String(diagnostics.minimumLevelDuration),
+      remainingTime: String(diagnostics.remainingTime),
       levelTransitioning: String(diagnostics.levelTransitioning),
       finished: String(diagnostics.finished),
       postProcessing: String(diagnostics.postProcessing),

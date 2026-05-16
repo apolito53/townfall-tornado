@@ -36,6 +36,98 @@ body {
   cursor: crosshair;
 }
 
+.start-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(111, 130, 105, 0.2), rgba(8, 12, 11, 0.58) 62%),
+    rgba(10, 14, 13, 0.46);
+  backdrop-filter: blur(5px);
+}
+
+.start-screen[hidden] {
+  display: none;
+}
+
+.start-screen__panel {
+  width: min(520px, 100%);
+  padding: 22px;
+  border: 1px solid rgba(255, 246, 210, 0.28);
+  border-radius: 8px;
+  background: rgba(23, 31, 29, 0.84);
+  box-shadow: 0 22px 70px rgba(6, 10, 8, 0.46);
+}
+
+.start-screen__header span {
+  display: block;
+  color: rgba(247, 242, 223, 0.68);
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.start-screen__header strong {
+  display: block;
+  margin-top: 2px;
+  color: #fff6d2;
+  font-size: clamp(2.2rem, 10vw, 4.4rem);
+  line-height: 0.92;
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.mode-button {
+  min-height: 104px;
+  padding: 14px;
+  border: 1px solid rgba(255, 246, 210, 0.28);
+  border-radius: 8px;
+  background: rgba(52, 76, 62, 0.84);
+  color: #fff6d2;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mode-button:hover,
+.mode-button:focus-visible {
+  background: rgba(82, 116, 86, 0.94);
+  outline: none;
+}
+
+.mode-button span {
+  display: block;
+  color: rgba(247, 242, 223, 0.7);
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.mode-button strong {
+  display: block;
+  margin-top: 6px;
+  color: #fff6d2;
+  font-size: clamp(1.12rem, 4vw, 1.55rem);
+  line-height: 1;
+}
+
+#app.is-starting .level-tracker,
+#app.is-starting .hud,
+#app.is-starting .storm-meter {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .level-tracker {
   position: fixed;
   top: 16px;
@@ -288,7 +380,7 @@ body {
 
 .pause-menu__actions {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
   margin-top: 18px;
 }
@@ -359,5 +451,13 @@ body {
 
   .pause-menu__actions {
     grid-template-columns: 1fr;
+  }
+
+  .mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .mode-button {
+    min-height: 82px;
   }
 }
