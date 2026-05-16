@@ -4,7 +4,7 @@ const BUILDABLE_COORDS = [-34, -22, -10, 10, 22, 34];
 const ROAD_COORDS = [-4, 4];
 const TOWN_BOUNDARY = 50;
 const CHUNK_SIZE = 72;
-const GENERATION_MARGIN = 26;
+const WORLD_GROUND_SIZE = 6000;
 const INITIAL_CHUNK_RADIUS = 2;
 const EDGE_GENERATION_RADIUS = 2;
 const SIMULATION_CELL_SIZE = 24;
@@ -1040,23 +1040,18 @@ export class Town {
   }
 
   ensureGeneratedAround(position) {
-    const nearCurrentEdge = Math.abs(position.x) > this.boundarySize - GENERATION_MARGIN
-      || Math.abs(position.z) > this.boundarySize - GENERATION_MARGIN;
-
-    if (!nearCurrentEdge) {
-      return false;
-    }
-
     const centerChunkX = Math.round(position.x / CHUNK_SIZE);
     const centerChunkZ = Math.round(position.z / CHUNK_SIZE);
-
     const generatedCount = this.generateChunkNeighborhood(centerChunkX, centerChunkZ, EDGE_GENERATION_RADIUS);
 
-    const furthestChunk = Math.max(
-      Math.abs(centerChunkX) + EDGE_GENERATION_RADIUS,
-      Math.abs(centerChunkZ) + EDGE_GENERATION_RADIUS,
-    );
-    this.boundarySize = Math.max(this.boundarySize, furthestChunk * CHUNK_SIZE + CHUNK_SIZE * 0.62);
+    if (generatedCount > 0) {
+      const furthestChunk = Math.max(
+        Math.abs(centerChunkX) + EDGE_GENERATION_RADIUS,
+        Math.abs(centerChunkZ) + EDGE_GENERATION_RADIUS,
+      );
+      this.boundarySize = Math.max(this.boundarySize, furthestChunk * CHUNK_SIZE + CHUNK_SIZE * 0.62);
+    }
+
     return generatedCount > 0;
   }
 
@@ -1102,6 +1097,12 @@ export class Town {
   }
 
   createTerrain() {
+    const worldGround = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_GROUND_SIZE, WORLD_GROUND_SIZE), MATERIALS.grass);
+    worldGround.position.y = -0.04;
+    worldGround.rotation.x = -Math.PI * 0.5;
+    worldGround.receiveShadow = false;
+    this.group.add(worldGround);
+
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(130, 130), MATERIALS.grass);
     ground.rotation.x = -Math.PI * 0.5;
     ground.receiveShadow = true;

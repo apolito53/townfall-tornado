@@ -155,6 +155,21 @@ try {
       errors.push(`${viewport.name}: expected wider starting town footprint, got ${upgradedDiagnostics.generatedChunks} chunks`);
     }
 
+    const corridorProbe = await page.evaluate(() => {
+      const game = window.__townfallGame;
+      game.town.ensureGeneratedAround({ x: 170, z: 0 });
+      const generatedDogleg = game.town.ensureGeneratedAround({ x: 170, z: 200 });
+      return {
+        generatedDogleg,
+        hasDoglegCenter: game.town.generatedChunks.has('2,3'),
+        generatedChunks: game.town.generatedChunks.size,
+      };
+    });
+
+    if (!corridorProbe.generatedDogleg || !corridorProbe.hasDoglegCenter) {
+      errors.push(`${viewport.name}: town chunks did not fill a dogleg path through expanded bounds (${JSON.stringify(corridorProbe)})`);
+    }
+
     if (upgradedDiagnostics.totalItems <= 0) {
       errors.push(`${viewport.name}: town item diagnostics did not report generated destructibles`);
     }
