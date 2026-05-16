@@ -191,8 +191,12 @@ try {
       errors.push(`${viewport.name}: spatial simulation culling was not active (${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems})`);
     }
 
-    if (upgradedDiagnostics.debrisCount > 96) {
-      errors.push(`${viewport.name}: scene debris cap was exceeded (${upgradedDiagnostics.debrisCount})`);
+    if (upgradedDiagnostics.particleCapacity <= 0 || upgradedDiagnostics.instancedDebrisCapacity <= 0) {
+      errors.push(`${viewport.name}: debris particle/instance diagnostics were missing (${JSON.stringify(upgradedDiagnostics)})`);
+    }
+
+    if (upgradedDiagnostics.activeInstancedChunks > upgradedDiagnostics.instancedDebrisCapacity) {
+      errors.push(`${viewport.name}: instanced debris cap was exceeded (${upgradedDiagnostics.activeInstancedChunks}/${upgradedDiagnostics.instancedDebrisCapacity})`);
     }
 
     if (upgradedDiagnostics.effectPieces > 108) {
@@ -240,6 +244,7 @@ try {
     }));
     if (
       !debugOverlay.text.includes('Performance')
+      || !debugOverlay.text.includes('Particles')
       || typeof debugOverlay.diagnostics.fps !== 'number'
       || typeof debugOverlay.diagnostics.hitchCount !== 'number'
       || debugOverlay.diagnostics.sceneObjects <= 0
@@ -266,8 +271,16 @@ try {
       errors.push(`${viewport.name}: huge storm simulation budget was exceeded (${stressDiagnostics.simulatedItems})`);
     }
 
-    if (stressDiagnostics.effectPieces > 108 || stressDiagnostics.debrisCount > 96) {
+    if (
+      stressDiagnostics.effectPieces > 108
+      || stressDiagnostics.activeParticles > stressDiagnostics.particleCapacity
+      || stressDiagnostics.activeInstancedChunks > stressDiagnostics.instancedDebrisCapacity
+    ) {
       errors.push(`${viewport.name}: huge storm effect/debris caps were exceeded (${JSON.stringify(stressDiagnostics)})`);
+    }
+
+    if (stressDiagnostics.activeParticles <= 0 || stressDiagnostics.particleCapacity < 1000) {
+      errors.push(`${viewport.name}: huge storm did not exercise the GPU particle debris layer (${JSON.stringify(stressDiagnostics)})`);
     }
 
     if (stressDiagnostics.levelNumber !== 1 || stressDiagnostics.levelTransitioning === true) {
@@ -379,7 +392,7 @@ try {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);
     }
 
-    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, chunks ${upgradedDiagnostics.generatedChunks}, simulated ${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems}, effects ${upgradedDiagnostics.effectPieces}, debris ${upgradedDiagnostics.debrisCount}, visible parts ${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts}, draw calls ${upgradedDiagnostics.drawCalls}, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
+    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, chunks ${upgradedDiagnostics.generatedChunks}, simulated ${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems}, effects ${upgradedDiagnostics.effectPieces}, particles ${stressDiagnostics.activeParticles}/${stressDiagnostics.particleCapacity}, instanced chunks ${stressDiagnostics.activeInstancedChunks}/${stressDiagnostics.instancedDebrisCapacity}, visible parts ${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts}, draw calls ${upgradedDiagnostics.drawCalls}, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
     await page.close();
   }
 } finally {

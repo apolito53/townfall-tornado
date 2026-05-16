@@ -125,6 +125,11 @@ function createRenderBudgetStats() {
   };
 }
 
+function materialToDebrisColor(material) {
+  const source = Array.isArray(material) ? material[0] : material;
+  return source?.color?.getHex?.() ?? 0x746855;
+}
+
 function hashChunk(chunkX, chunkZ) {
   let hash = 2166136261;
   hash ^= chunkX + 0x9e3779b9;
@@ -401,10 +406,11 @@ const STRUCTURAL_TYPES = new Set(['House', 'Shop', 'Town Hall', 'Water Tower']);
 class Destructible {
   [key: string]: any;
 
-  constructor(config, position, rotation = 0) {
+  constructor(config, position, rotation = 0, debrisEffects = null) {
     this.model = config.group;
     this.group = new THREE.Group();
     this.group.add(this.model);
+    this.debrisEffects = debrisEffects;
     this.type = config.type;
     this.massRequired = config.massRequired;
     this.points = config.points;
@@ -672,18 +678,11 @@ class Destructible {
       return null;
     }
 
-    const piece = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material ?? MATERIALS.rubbleDark);
     const size = baseSize * (0.55 + Math.random() * 1.5);
-    piece.scale.set(size * (0.7 + Math.random()), size * (0.35 + Math.random() * 0.8), size * (0.7 + Math.random()));
-    piece.position.copy(localPosition);
-    piece.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-    piece.castShadow = false;
-    piece.receiveShadow = false;
-
-    const stormLocal = this.group.worldToLocal(stormPosition.clone());
+    const worldPosition = this.group.localToWorld(localPosition.clone());
     const direction = pulledTowardStorm
-      ? stormLocal.clone().sub(localPosition)
-      : localPosition.clone().sub(stormLocal);
+      ? stormPosition.clone().sub(worldPosition)
+      : worldPosition.clone().sub(stormPosition);
     direction.y = 0;
     if (direction.lengthSq() < 0.01) {
       direction.set(Math.random() - 0.5, 0, Math.random() - 0.5);
@@ -691,17 +690,26 @@ class Destructible {
     direction.normalize();
     const tangent = new THREE.Vector3(-direction.z, 0, direction.x).multiplyScalar((Math.random() - 0.5) * 1.6);
 
-    piece.userData.velocity = new THREE.Vector3(
+    const velocity = new THREE.Vector3(
       direction.x * (1.2 + Math.random() * 2.2) + tangent.x,
       dynamic ? 2 + Math.random() * 3.5 + (pulledTowardStorm ? 1.2 : 0) : 0,
       direction.z * (1.2 + Math.random() * 2.2) + tangent.z,
     );
-    piece.userData.dynamic = dynamic;
-    piece.userData.floorY = piece.scale.y * 0.5;
-    this.group.add(piece);
-    this.generatedPieces.push(piece);
-    this.limitGeneratedPieces(this.isStructural ? STRUCTURAL_GENERATED_PIECE_LIMIT : MINOR_GENERATED_PIECE_LIMIT);
-    return piece;
+
+    if (this.debrisEffects) {
+      const color = materialToDebrisColor(material ?? MATERIALS.rubbleDark);
+      const burstRadius = THREE.MathUtils.clamp(size * (dynamic ? 2.4 : 3.8), 0.42, this.radius * 0.55);
+      this.debrisEffects.emitStructuralBurst(worldPosition, burstRadius, color, dynamic ? 0.26 : 0.18);
+      this.debrisEffects.emitChunk({
+        position: worldPosition,
+        velocity,
+        color,
+        size,
+        lifetime: dynamic ? 1.4 + Math.random() * 1.8 : 3.8 + Math.random() * 2.8,
+      });
+    }
+
+    return null;
   }
 
   limitGeneratedPieces(maxPieces) {
@@ -767,6 +775,7 @@ class Destructible {
 
     const rubbleCount = Math.min(18, Math.max(6, Math.round(this.radius * 2.2)));
     const baseSize = THREE.MathUtils.clamp(this.radius * 0.11, 0.28, 0.9);
+    this.debrisEffects?.emitGroundDust(this.group.position, this.radius * 1.35, 0.9 + stormProfile.category * 0.12);
 
     for (let index = 0; index < rubbleCount; index += 1) {
       const angle = Math.random() * Math.PI * 2;
@@ -792,9 +801,6 @@ class Destructible {
 
     this.damage = 1;
     this.damageStage = DAMAGE_STAGE_THRESHOLDS.length;
-    this.generatedPieces.forEach((piece) => {
-      piece.userData.velocity.multiplyScalar(0.65 + stormProfile.category * 0.08);
-    });
   }
 
   swallowIntoStorm() {
@@ -905,8 +911,9 @@ class Destructible {
 export class Town {
   [key: string]: any;
 
-  constructor(scene) {
+  constructor(scene, debrisEffects = null) {
     this.scene = scene;
+    this.debrisEffects = debrisEffects;
     this.group = new THREE.Group();
     this.levelIndex = 0;
     this.scene.add(this.group);
@@ -1228,6 +1235,7 @@ export class Town {
     const radius = stormProfile.radius * (0.86 + Math.random() * 0.28);
     const opacity = THREE.MathUtils.clamp(0.22 + stormProfile.category * 0.04, 0.24, 0.5);
     this.addGroundScar(stormPosition, radius, opacity, MATERIALS.soilScar);
+    this.debrisEffects?.emitGroundDust(stormPosition, radius * 0.9, 0.18 + stormProfile.category * 0.055);
   }
 
   addCollapseScar(position, radius, intensity = 1) {
@@ -1339,7 +1347,7 @@ export class Town {
   }
 
   addItem(config, position, rotation = 0) {
-    const item = new Destructible(config, position, rotation);
+    const item = new Destructible(config, position, rotation, this.debrisEffects);
     this.items.push(item);
     this.registerItem(item);
     this.group.add(item.group);

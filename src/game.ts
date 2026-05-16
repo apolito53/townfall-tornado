@@ -4,6 +4,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { DebrisParticles } from './debrisParticles';
 import { InputController } from './input';
 import { StormAtmosphereShader } from './stormAtmosphereShader';
 import { Tornado } from './tornado';
@@ -13,19 +14,12 @@ import { Hud } from './ui';
 const LEVEL_COMPLETE_DELAY = 2.35;
 const MAX_RENDER_PIXEL_RATIO = 1.35;
 const SHADOW_MAP_SIZE = 1024;
-const MAX_SCENE_DEBRIS = 96;
-const MAX_DEBRIS_PER_FRAME = 16;
 const MAX_ABSORPTIONS_PER_FRAME = 8;
 const DIAGNOSTICS_UPDATE_INTERVAL_MS = 450;
 const HITCH_FRAME_THRESHOLD_MS = 75;
 const MIN_LEVEL_DURATION_BY_INDEX = [10, 14, 18, 22, 26];
 const LEVEL_TARGET_MULTIPLIER_BY_CATEGORY = [1, 2.4, 5.5, 12, 25];
 const LEVEL_DAMAGE_BONUS_BY_CATEGORY = [0, 0.04, 0.1, 0.17, 0.24];
-const DEBRIS_GEOMETRY = new THREE.BoxGeometry(0.45, 0.22, 0.32);
-const DEBRIS_MATERIALS = {
-  tree: new THREE.MeshStandardMaterial({ color: 0x4d8a4f, roughness: 0.88 }),
-  structure: new THREE.MeshStandardMaterial({ color: 0xd7c3a3, roughness: 0.88 }),
-};
 const GAME_MODES = {
   LEVELS: 'levels',
   ENDLESS: 'endless',
@@ -169,10 +163,9 @@ export class Game {
     this.input = new InputController(canvas);
     this.hud = new Hud();
     this.tornado = new Tornado(this.scene);
-    this.town = new Town(this.scene);
-    this.debris = [];
+    this.debrisParticles = new DebrisParticles(this.scene);
+    this.town = new Town(this.scene, this.debrisParticles);
     this.pendingAbsorbedItems = [];
-    this.frameDebrisBudget = MAX_DEBRIS_PER_FRAME;
     this.levelIndex = 0;
     this.levelStartScore = 0;
     this.levelStartMass = 0;
@@ -332,7 +325,7 @@ export class Game {
     this.camera.fov = CAMERA_SCALE_BY_CATEGORY[0].fov;
     this.camera.updateProjectionMatrix();
     this.pendingAbsorbedItems = [];
-    this.clearDebris();
+    this.debrisParticles.reset();
     this.hud.flashMessage(message ?? `Level ${this.levelIndex + 1}: ${this.currentLevel.name}`, 1.8);
     this.syncGameShell();
   }
@@ -451,8 +444,8 @@ export class Game {
     }
 
     this.updateCamera(dt);
-    this.updateDebris(dt);
     this.updateWeatherShaders(dt);
+    this.debrisParticles.update(this.weatherTime, dt, this.tornado.position, this.currentStormProfile);
     this.renderer.info.reset();
     this.renderer.shadowMap.needsUpdate = this.pendingShadowRefresh;
     this.pendingShadowRefresh = false;
@@ -520,7 +513,7 @@ export class Game {
 
   update(dt) {
     this.levelElapsed += dt;
-    this.frameDebrisBudget = MAX_DEBRIS_PER_FRAME;
+    this.debrisParticles.beginFrame();
     this.remainingTime = this.gameMode === GAME_MODES.ENDLESS
       ? Infinity
       : Math.max(0, this.remainingTime - dt);
@@ -724,54 +717,10 @@ export class Game {
   }
 
   spawnDebrisBurst(position, radius, type) {
-    const availableSceneSlots = MAX_SCENE_DEBRIS - this.debris.length;
-    const availableFrameSlots = this.frameDebrisBudget;
-    const count = Math.min(availableSceneSlots, availableFrameSlots, Math.min(6, Math.max(2, Math.round(radius * 0.9))));
-    if (count <= 0) {
-      return;
-    }
-
-    this.frameDebrisBudget -= count;
-    const material = type === 'Tree' ? DEBRIS_MATERIALS.tree : DEBRIS_MATERIALS.structure;
-
-    for (let index = 0; index < count; index += 1) {
-      const shard = new THREE.Mesh(DEBRIS_GEOMETRY, material);
-      shard.position.copy(position);
-      shard.position.y += 0.4 + Math.random() * 1.1;
-      shard.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-      shard.userData.velocity = new THREE.Vector3(
-        (Math.random() - 0.5) * 7,
-        4 + Math.random() * 7,
-        (Math.random() - 0.5) * 7,
-      );
-      shard.userData.life = 0.75 + Math.random() * 0.5;
-      shard.castShadow = false;
-      this.scene.add(shard);
-      this.debris.push(shard);
-    }
-  }
-
-  updateDebris(dt) {
-    for (let index = this.debris.length - 1; index >= 0; index -= 1) {
-      const shard = this.debris[index];
-      shard.userData.life -= dt;
-      shard.userData.velocity.y -= 14 * dt;
-      shard.position.addScaledVector(shard.userData.velocity, dt);
-      shard.rotation.x += dt * 5.2;
-      shard.rotation.y += dt * 4.8;
-
-      if (shard.userData.life <= 0 || shard.position.y < -1) {
-        this.scene.remove(shard);
-        this.debris.splice(index, 1);
-      }
-    }
-  }
-
-  clearDebris() {
-    for (const shard of this.debris) {
-      this.scene.remove(shard);
-    }
-    this.debris = [];
+    const materialType = type === 'Tree' ? 'leaf' : 'structure';
+    const intensity = THREE.MathUtils.clamp(radius * 0.18, 0.55, 1.9);
+    this.debrisParticles.emitStructuralBurst(position, radius, materialType, intensity);
+    this.debrisParticles.emitSuctionDebris(position, this.currentStormProfile, intensity * 0.72, this.tornado.position);
   }
 
   collectDiagnostics() {
@@ -817,6 +766,7 @@ export class Game {
     const sceneStats = this.debugOverlayVisible ? this.collectSceneStats() : this.lastSceneStats;
     const profile = this.currentStormProfile ?? this.tornado.getProfile();
     const performanceStats = this.performanceStats;
+    const debrisStats = this.debrisParticles.getDiagnostics();
     const diagnostics = {
       renderOk: visibleSamples >= 3 && renderInfo.calls > 0,
       sampledPixels: this.pixelDiagnosticsEnabled ? `${visibleSamples}/${samplePoints.length}` : 'skipped',
@@ -840,7 +790,17 @@ export class Game {
       stormRadius: Number(profile.radius.toFixed(2)),
       stormPullRadius: Number(profile.pullRadius.toFixed(2)),
       stormLiftLimit: Number(profile.liftLimit.toFixed(2)),
-      debrisCount: this.debris.length,
+      debrisCount: debrisStats.activeChunks,
+      activeParticles: debrisStats.activeParticles,
+      particleCapacity: debrisStats.particleCapacity,
+      emittedParticles: debrisStats.emittedParticles,
+      skippedParticleEmissions: debrisStats.skippedParticleEmissions,
+      recycledParticles: debrisStats.recycledParticles,
+      activeInstancedChunks: debrisStats.activeChunks,
+      instancedDebrisCapacity: debrisStats.chunkCapacity,
+      emittedInstancedChunks: debrisStats.emittedChunks,
+      skippedInstancedChunks: debrisStats.skippedChunks,
+      recycledInstancedChunks: debrisStats.recycledChunks,
       pendingAbsorptions: this.pendingAbsorbedItems.length,
       generatedChunks: this.town.generatedChunks.size,
       totalItems: townStats.totalItems,
@@ -912,6 +872,16 @@ export class Game {
       stormPullRadius: String(diagnostics.stormPullRadius),
       stormLiftLimit: String(diagnostics.stormLiftLimit),
       debrisCount: String(diagnostics.debrisCount),
+      activeParticles: String(diagnostics.activeParticles),
+      particleCapacity: String(diagnostics.particleCapacity),
+      emittedParticles: String(diagnostics.emittedParticles),
+      skippedParticleEmissions: String(diagnostics.skippedParticleEmissions),
+      recycledParticles: String(diagnostics.recycledParticles),
+      activeInstancedChunks: String(diagnostics.activeInstancedChunks),
+      instancedDebrisCapacity: String(diagnostics.instancedDebrisCapacity),
+      emittedInstancedChunks: String(diagnostics.emittedInstancedChunks),
+      skippedInstancedChunks: String(diagnostics.skippedInstancedChunks),
+      recycledInstancedChunks: String(diagnostics.recycledInstancedChunks),
       pendingAbsorptions: String(diagnostics.pendingAbsorptions),
       generatedChunks: String(diagnostics.generatedChunks),
       totalItems: String(diagnostics.totalItems),
@@ -1029,9 +999,11 @@ export class Game {
         ['Active / Throttled', `${formatDebugNumber(diagnostics.activeItems)} / ${formatDebugNumber(diagnostics.throttledCandidates)}`],
       ])}
       ${this.renderDebugSection('Effects', [
-        ['Scene Debris', formatDebugNumber(diagnostics.debrisCount)],
+        ['Particles', `${formatDebugNumber(diagnostics.activeParticles)} / ${formatDebugNumber(diagnostics.particleCapacity)}`],
+        ['Instanced Chunks', `${formatDebugNumber(diagnostics.activeInstancedChunks)} / ${formatDebugNumber(diagnostics.instancedDebrisCapacity)}`],
         ['Pending Absorptions', formatDebugNumber(diagnostics.pendingAbsorptions)],
         ['Town Pieces', `${formatDebugNumber(diagnostics.effectPieces)} made, ${formatDebugNumber(diagnostics.skippedEffectPieces)} skipped`],
+        ['Recycled / Skipped', `${formatDebugNumber(diagnostics.recycledParticles + diagnostics.recycledInstancedChunks)} / ${formatDebugNumber(diagnostics.skippedParticleEmissions + diagnostics.skippedInstancedChunks)}`],
         ['Ground Scars', formatDebugNumber(diagnostics.groundScars)],
       ])}
       ${this.renderDebugSection('Storm', [
