@@ -9,7 +9,17 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-Then open the local Vite URL shown in the terminal.
+Then open `http://127.0.0.1:5175/`.
+
+## Local Ports
+
+This Vite project has a dedicated strict port assignment so it can run beside the other browser prototypes:
+
+- Base Vite server: `5175`
+- Reserved logging/debug receiver: `5176`
+- Preview server: `4175`
+
+No logging server is currently wired here; keep `5176` reserved for one if it gets added.
 
 ## Controls
 
@@ -22,7 +32,8 @@ Then open the local Vite URL shown in the terminal.
 
 ```powershell
 npm.cmd run build
-$env:TOWNFALL_URL='http://127.0.0.1:5173/'; npm.cmd run verify:render
+npm.cmd run typecheck
+$env:TOWNFALL_URL='http://127.0.0.1:5175/'; npm.cmd run verify:render
 ```
 
 The render verification captures desktop and mobile screenshots under `artifacts/` and checks that the WebGL canvas is nonblank and keyboard input moves the storm.
