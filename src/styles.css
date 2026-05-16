@@ -121,6 +121,57 @@ body {
   line-height: 1;
 }
 
+.quality-control {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.quality-control > span {
+  color: rgba(247, 242, 223, 0.68);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.quality-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid rgba(255, 246, 210, 0.2);
+  border-radius: 8px;
+  background: rgba(9, 15, 13, 0.38);
+}
+
+.quality-button {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(247, 242, 223, 0.7);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.quality-button:hover,
+.quality-button:focus-visible {
+  background: rgba(91, 128, 96, 0.42);
+  color: #fff6d2;
+  outline: none;
+}
+
+.quality-button[aria-pressed="true"] {
+  border-color: rgba(255, 246, 210, 0.34);
+  background: rgba(92, 128, 93, 0.86);
+  color: #fff6d2;
+  box-shadow: 0 8px 18px rgba(8, 12, 10, 0.24);
+}
+
 #app.is-starting .level-tracker,
 #app.is-starting .hud,
 #app.is-starting .storm-meter {
@@ -356,6 +407,10 @@ body {
   display: grid;
   gap: 10px;
   margin-top: 18px;
+}
+
+.setting-row.quality-control {
+  gap: 8px;
 }
 
 .setting-row input[type="range"] {

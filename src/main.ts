@@ -46,4 +46,10 @@ document.querySelector('#perspective-slider').addEventListener('input', (event) 
   game.setPerspective(Number((event.target as HTMLInputElement).value) / 100);
 });
 
+document.querySelectorAll('[data-quality-option]').forEach((button) => {
+  button.addEventListener('click', () => {
+    game.setQuality((button as HTMLElement).dataset.qualityOption);
+  });
+});
+
 game.start();

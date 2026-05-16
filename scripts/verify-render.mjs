@@ -235,6 +235,10 @@ try {
       errors.push(`${viewport.name}: renderer pixel ratio was not capped (${upgradedDiagnostics.pixelRatio})`);
     }
 
+    if (upgradedDiagnostics.quality !== 'high' || upgradedDiagnostics.qualityDebrisScale !== 1) {
+      errors.push(`${viewport.name}: default quality diagnostics were not high (${JSON.stringify(upgradedDiagnostics)})`);
+    }
+
     if (upgradedDiagnostics.postProcessing !== true) {
       errors.push(`${viewport.name}: post-processing diagnostics were not enabled`);
     }
@@ -398,6 +402,33 @@ try {
     if (beforePerspective === afterPerspective) {
       errors.push(`${viewport.name}: perspective slider did not update diagnostics`);
     }
+
+    await page.locator('.pause-menu [data-quality-option="low"]').click();
+    await page.waitForFunction(
+      () => document.querySelector('#diagnostics')?.dataset.quality === 'low',
+      undefined,
+      { timeout: 3000 },
+    );
+    const lowQualityDiagnostics = await page.evaluate(() => window.__townfallDiagnostics);
+    const lowQualityPressed = await page.locator('.pause-menu [data-quality-option="low"]').getAttribute('aria-pressed');
+    if (
+      lowQualityPressed !== 'true'
+      || lowQualityDiagnostics.pixelRatio > 0.76
+      || lowQualityDiagnostics.postProcessing !== false
+      || lowQualityDiagnostics.shadowsEnabled !== false
+      || lowQualityDiagnostics.bloomEnabled !== false
+      || lowQualityDiagnostics.qualityDebrisScale >= 1
+      || lowQualityDiagnostics.qualityTownDetailScale >= 1
+    ) {
+      errors.push(`${viewport.name}: low quality mode did not reduce renderer/effect settings (${JSON.stringify(lowQualityDiagnostics)})`);
+    }
+
+    await page.locator('.pause-menu [data-quality-option="high"]').click();
+    await page.waitForFunction(
+      () => document.querySelector('#diagnostics')?.dataset.quality === 'high',
+      undefined,
+      { timeout: 3000 },
+    );
     await page.getByRole('button', { name: 'Resume' }).click();
 
     await page.locator('#pause-button').click({ force: true });

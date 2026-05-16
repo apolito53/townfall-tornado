@@ -11,14 +11,14 @@
 
 ## Main Files
 
-- `src/game.ts` owns scene setup, renderer, post-processing composer, pause state, perspective slider state, level progression, category-scaled objective targets, minimum level duration pacing, queued absorption rewards, category-scaled lower oblique camera follow with adaptive fog, loop timing, score, timer, capped scene debris bursts, capped render quality, shadow refresh scheduling, `F3` debug overlay state, and performance/render diagnostics.
+- `src/game.ts` owns scene setup, renderer, post-processing composer, persisted quality presets, pause state, perspective slider state, level progression, category-scaled objective targets, minimum level duration pacing, queued absorption rewards, category-scaled lower oblique camera follow with adaptive fog, loop timing, score, timer, capped scene debris bursts, capped render quality, shadow refresh scheduling, `F3` debug overlay state, and performance/render diagnostics.
 - `src/categoryProgression.ts` owns the very steep log-spaced tornado category mass requirements shared by gameplay and the HUD growth meter.
 - `src/debugLogger.ts` connects to the optional local debug receiver after `?debugLogs`/`localStorage` opt-in and streams console warnings/errors, uncaught errors, frame hitches, and town simulation pressure breadcrumbs when it is running.
-- `src/debrisParticles.ts` owns the pooled GPU debris layer: shader-driven dust/fleck particles plus strict-capacity instanced chunk debris.
+- `src/debrisParticles.ts` owns the pooled GPU debris layer: shader-driven dust/fleck particles plus strict-capacity instanced chunk debris and quality-scaled emission density.
 - `src/stormAtmosphereShader.ts` owns the full-screen storm grading shader for humid haze, dark cloud shadowing, rain streaks, grain, vignette, and lightning wash.
 - `src/townInstancing.ts` owns the instanced far-town proxy renderer for simple house/shop LODs, trees, fences, cars, and road stripes.
 - `src/tornado.ts` owns tornado growth stats, category thresholds, dramatic diameter scaling, taller wiggly sky-connected funnel visuals, procedural smoky funnel/storm-sky textures, wall cloud curtains, dust, and airborne debris.
-- `src/town.ts` owns terrain, roads, a large low-cost base ground plane, more detailed low-poly building models, destructible town props, staged structural damage, pressure bursts, rotating per-frame simulation budgets, frame-budgeted debris particle/chunk emissions, persistent capped ground scars, continuous 5x5 procedural town chunk loading around the tornado, spatial buckets for nearby destructible simulation, full-model promotion near storm interaction, distance-based render LOD, lift thresholds, suction response, and destroyed ratio.
+- `src/town.ts` owns terrain, roads, a large low-cost base ground plane, more detailed low-poly building models, destructible town props, staged structural damage, pressure bursts, rotating per-frame simulation budgets, frame-budgeted debris particle/chunk emissions, persistent capped ground scars, continuous 5x5 procedural town chunk loading around the tornado, spatial buckets for nearby destructible simulation, quality-scaled full-model promotion near storm interaction, distance-based render LOD, lift thresholds, suction response, and destroyed ratio.
 - `src/input.ts` translates keyboard and pointer/touch steering into a normalized movement vector.
 - `src/ui.ts` updates the level tracker, HUD, growth bar, timer, and short storm messages.
 - `src/globals.d.ts` declares local browser diagnostics hooks used by the smoke tests.
@@ -30,7 +30,7 @@
 - Adjust tornado progression in `src/categoryProgression.ts`; adjust tornado feel in `src/tornado.ts`: diameter `radius`, `pullRadius`, `liftLimit`, `speed`, `pullStrength`, smoky funnel texture, and stacked funnel-section wobble.
 - Add or tune destructible object types and building detail in `src/town.ts`: creation helpers plus `massRequired`, `points`, `growth`, `radius`, staged damage roles, level density, loaded chunk radius, world base ground size, spatial simulation cell size, render LOD radii, and procedural chunk placement.
 - Tune far-town proxy capacities, simple LOD shapes, and instanced road stripe behavior in `src/townInstancing.ts`.
-- Change levels, category-scaled score/damage targets, queued absorption pacing, timer, combo, pause behavior, camera angle/zoom/fog composition, post-processing setup, scene debris caps, minimum level duration, or diagnostics in `src/game.ts`.
+- Change levels, category-scaled score/damage targets, queued absorption pacing, timer, combo, pause behavior, quality presets, camera angle/zoom/fog composition, post-processing setup, scene debris caps, minimum level duration, or diagnostics in `src/game.ts`.
 - Tune visual debris capacity, shader motion, particle colors, and instanced chunk behavior in `src/debrisParticles.ts`.
 - Tune screen-space storm realism in `src/stormAtmosphereShader.ts`: color grade, haze, rain streaks, vignette, grain, and lightning response.
 - Change visual layout and responsive HUD behavior in `src/styles.css`.

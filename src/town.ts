@@ -920,13 +920,13 @@ class Destructible {
     this.group.rotation.z -= inward.x * shake * dt * 8;
   }
 
-  applyRenderBudget(focusPosition, category) {
+  applyRenderBudget(focusPosition, category, qualityScale = 1) {
     const distanceX = this.group.position.x - focusPosition.x;
     const distanceZ = this.group.position.z - focusPosition.z;
     const distanceSq = distanceX * distanceX + distanceZ * distanceZ;
     const categoryIndex = Math.min(DETAIL_LOD_RADIUS_BY_CATEGORY.length - 1, Math.max(0, category - 1));
-    const detailRadius = DETAIL_LOD_RADIUS_BY_CATEGORY[categoryIndex];
-    const minorPropRadius = MINOR_PROP_RADIUS_BY_CATEGORY[categoryIndex];
+    const detailRadius = DETAIL_LOD_RADIUS_BY_CATEGORY[categoryIndex] * qualityScale;
+    const minorPropRadius = MINOR_PROP_RADIUS_BY_CATEGORY[categoryIndex] * qualityScale;
     const active = this.needsOngoingSimulation();
     const isMinorProp = !this.isStructural;
     const showWholeItem = !isMinorProp || active || distanceSq <= minorPropRadius * minorPropRadius;
@@ -976,6 +976,7 @@ export class Town {
     this.levelIndex = 0;
     this.scene.add(this.group);
     this.instancedTown = null;
+    this.renderQualityScale = 1;
     this.resetForLevel(0);
   }
 
@@ -1020,6 +1021,10 @@ export class Town {
     this.lastInstancingStats = this.instancedTown.getDiagnostics();
     this.clearGroundDamage();
     this.updateRenderBudget(new THREE.Vector3(), 1);
+  }
+
+  setRenderQuality(scale = 1) {
+    this.renderQualityScale = THREE.MathUtils.clamp(scale, 0.45, 1.15);
   }
 
   update(stormProfile, stormPosition, dt) {
@@ -1204,7 +1209,7 @@ export class Town {
     stats.totalItems = this.items.length;
 
     for (const item of this.items) {
-      const itemStats = item.applyRenderBudget(focusPosition, category);
+      const itemStats = item.applyRenderBudget(focusPosition, category, this.renderQualityScale);
       stats.visibleItems += itemStats.visibleItems;
       stats.visibleParts += itemStats.visibleParts;
       stats.totalParts += itemStats.totalParts;

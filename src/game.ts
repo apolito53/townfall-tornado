@@ -24,6 +24,50 @@ const GAME_MODES = {
   LEVELS: 'levels',
   ENDLESS: 'endless',
 };
+const DEFAULT_QUALITY = 'high';
+// Quality presets intentionally touch several systems. Pixel ratio is the big
+// GPU lever, while debris/detail distance keep the huge-storm cases from
+// turning weaker machines into a slideshow.
+const QUALITY_SETTINGS = {
+  low: {
+    label: 'Low',
+    pixelRatioCap: 0.75,
+    shadows: false,
+    shadowMapSize: 0,
+    bloom: false,
+    stormPost: false,
+    debrisScale: 0.38,
+    chunkScale: 0.35,
+    townDetailScale: 0.58,
+    renderBudgetInterval: 0.5,
+  },
+  medium: {
+    label: 'Medium',
+    pixelRatioCap: 1,
+    shadows: true,
+    shadowMapSize: 768,
+    bloom: false,
+    stormPost: true,
+    stormPostScale: 0.78,
+    debrisScale: 0.66,
+    chunkScale: 0.6,
+    townDetailScale: 0.78,
+    renderBudgetInterval: 0.4,
+  },
+  high: {
+    label: 'High',
+    pixelRatioCap: MAX_RENDER_PIXEL_RATIO,
+    shadows: true,
+    shadowMapSize: SHADOW_MAP_SIZE,
+    bloom: true,
+    stormPost: true,
+    stormPostScale: 1,
+    debrisScale: 1,
+    chunkScale: 1,
+    townDetailScale: 1,
+    renderBudgetInterval: 0.32,
+  },
+};
 const LEVELS = [
   {
     name: 'First Touchdown',
@@ -71,6 +115,10 @@ function getCameraScaleForCategory(category) {
 
 function getCategoryIndex(category) {
   return Math.min(LEVEL_TARGET_MULTIPLIER_BY_CATEGORY.length - 1, Math.max(0, category - 1));
+}
+
+function normalizeQualityKey(quality) {
+  return QUALITY_SETTINGS[quality] ? quality : DEFAULT_QUALITY;
 }
 
 function createPerformanceStats() {
@@ -126,11 +174,14 @@ export class Game {
     this.pauseButtonElement = document.querySelector('#pause-button');
     this.retryLevelButtonElement = document.querySelector('#retry-level-button');
     this.restartButtonElement = document.querySelector('#restart-button');
+    this.qualityButtons = [...document.querySelectorAll('[data-quality-option]')];
     this.canvas = canvas;
     this.diagnosticsElement = diagnosticsElement;
     this.pixelDiagnosticsEnabled = new URLSearchParams(window.location.search).has('pixelDiagnostics');
     this.debugOverlayVisible = new URLSearchParams(window.location.search).has('debug')
       || window.localStorage.getItem('townfall.debugOverlay') === 'true';
+    this.qualityKey = normalizeQualityKey(window.localStorage.getItem('townfall.quality') ?? DEFAULT_QUALITY);
+    this.qualityProfile = QUALITY_SETTINGS[this.qualityKey];
     this.performanceStats = createPerformanceStats();
     this.lastSceneStats = createSceneStats();
     this.clock = new THREE.Clock();
@@ -149,13 +200,13 @@ export class Game {
       preserveDrawingBuffer: true,
       powerPreference: 'high-performance',
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_RENDER_PIXEL_RATIO));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.qualityProfile.pixelRatioCap));
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.82;
     this.renderer.info.autoReset = false;
     this.pendingShadowRefresh = false;
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = this.qualityProfile.shadows;
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.setupPostProcessing();
@@ -195,6 +246,7 @@ export class Game {
 
     this.setupLights();
     this.resize();
+    this.applyQualitySettings();
     this.queueShadowRefresh();
     this.syncGameShell();
     this.setDebugOverlayVisible(this.debugOverlayVisible, { persist: false });
@@ -347,6 +399,63 @@ export class Game {
     this.perspectiveAmount = THREE.MathUtils.clamp(amount, 0, 1);
   }
 
+  setQuality(qualityKey, { persist = true } = {}) {
+    this.qualityKey = normalizeQualityKey(qualityKey);
+    this.qualityProfile = QUALITY_SETTINGS[this.qualityKey];
+
+    if (persist) {
+      window.localStorage.setItem('townfall.quality', this.qualityKey);
+    }
+
+    this.applyQualitySettings();
+  }
+
+  applyQualitySettings() {
+    const quality = this.qualityProfile;
+
+    this.renderer?.setPixelRatio(Math.min(window.devicePixelRatio, quality.pixelRatioCap));
+    this.renderer.shadowMap.enabled = quality.shadows;
+
+    if (this.sunLight) {
+      this.sunLight.castShadow = quality.shadows;
+      if (quality.shadowMapSize > 0 && this.sunLight.shadow.mapSize.x !== quality.shadowMapSize) {
+        this.sunLight.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
+        this.sunLight.shadow.map?.dispose();
+        this.sunLight.shadow.map = null;
+      }
+    }
+
+    if (this.bloomPass) {
+      this.bloomPass.enabled = quality.bloom;
+    }
+
+    if (this.stormAtmospherePass) {
+      this.stormAtmospherePass.enabled = quality.stormPost;
+    }
+
+    this.debrisParticles?.setQuality({
+      particleScale: quality.debrisScale,
+      chunkScale: quality.chunkScale,
+      pixelRatioCap: quality.pixelRatioCap,
+    });
+    this.town?.setRenderQuality(quality.townDetailScale);
+    this.renderBudgetTimer = 0;
+    this.resize();
+    this.syncQualityControls();
+
+    if (quality.shadows) {
+      this.queueShadowRefresh();
+    }
+  }
+
+  syncQualityControls() {
+    for (const button of this.qualityButtons) {
+      const isCurrent = button.dataset.qualityOption === this.qualityKey;
+      button.setAttribute('aria-pressed', String(isCurrent));
+      button.classList.toggle('quality-button--active', isCurrent);
+    }
+  }
+
   syncGameShell() {
     this.appElement?.classList.toggle('is-starting', this.isAwaitingStart);
 
@@ -394,12 +503,13 @@ export class Game {
 
     const sun = new THREE.DirectionalLight(0xdfd2ad, 2.05);
     sun.position.set(-28, 56, 24);
-    sun.castShadow = true;
+    sun.castShadow = this.qualityProfile.shadows;
     sun.shadow.camera.left = -78;
     sun.shadow.camera.right = 78;
     sun.shadow.camera.top = 78;
     sun.shadow.camera.bottom = -78;
     sun.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+    this.sunLight = sun;
     this.scene.add(sun);
 
     const stormGlow = new THREE.PointLight(0xa7ffe0, 1.4, 40);
@@ -449,9 +559,13 @@ export class Game {
     this.updateWeatherShaders(dt);
     this.debrisParticles.update(this.weatherTime, dt, this.tornado.position, this.currentStormProfile);
     this.renderer.info.reset();
-    this.renderer.shadowMap.needsUpdate = this.pendingShadowRefresh;
+    this.renderer.shadowMap.needsUpdate = this.qualityProfile.shadows && this.pendingShadowRefresh;
     this.pendingShadowRefresh = false;
-    this.composer.render();
+    if (this.qualityProfile.bloom || this.qualityProfile.stormPost) {
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
     this.renderer.shadowMap.needsUpdate = false;
     this.samplePerformance(realFrameMs, performance.now() - frameStartedAt);
     this.collectDiagnostics();
@@ -544,7 +658,7 @@ export class Game {
     this.renderBudgetTimer -= dt;
     if (this.renderBudgetTimer <= 0) {
       this.town.updateRenderBudget(this.tornado.position, profile.category);
-      this.renderBudgetTimer = 0.32;
+      this.renderBudgetTimer = this.qualityProfile.renderBudgetInterval;
     }
 
     if (categoryChanged) {
@@ -719,11 +833,13 @@ export class Game {
 
     this.lightningEnergy = Math.max(0, this.lightningEnergy - dt * (3.8 + stormIntensity * 1.2));
     const lightning = Math.pow(this.lightningEnergy, 1.7);
+    const stormPostScale = this.qualityProfile.stormPostScale ?? 1;
+    const bloomScale = this.qualityProfile.bloom ? 1 : 0;
 
     this.stormAtmospherePass.uniforms.time.value = this.weatherTime;
-    this.stormAtmospherePass.uniforms.intensity.value = THREE.MathUtils.lerp(0.18, 0.74, stormIntensity);
+    this.stormAtmospherePass.uniforms.intensity.value = THREE.MathUtils.lerp(0.18, 0.74, stormIntensity) * stormPostScale;
     this.stormAtmospherePass.uniforms.lightning.value = lightning;
-    this.bloomPass.strength = 0.08 + stormIntensity * 0.055 + lightning * 0.18;
+    this.bloomPass.strength = (0.08 + stormIntensity * 0.055 + lightning * 0.18) * bloomScale;
     this.bloomPass.radius = 0.32 + stormIntensity * 0.12;
     this.bloomPass.threshold = 0.78 - stormIntensity * 0.06;
     this.renderer.toneMappingExposure = 0.9 + lightning * 0.12;
@@ -850,6 +966,12 @@ export class Game {
       geometries: this.renderer.info.memory.geometries,
       textures: this.renderer.info.memory.textures,
       pixelRatio: this.renderer.getPixelRatio(),
+      quality: this.qualityKey,
+      qualityLabel: this.qualityProfile.label,
+      qualityPixelRatioCap: this.qualityProfile.pixelRatioCap,
+      qualityDebrisScale: this.qualityProfile.debrisScale,
+      qualityTownDetailScale: this.qualityProfile.townDetailScale,
+      shadowsEnabled: this.renderer.shadowMap.enabled,
       cameraZoomScale: Number((this.cameraOffset.z / BASE_CAMERA_OFFSET.z).toFixed(3)),
       cameraFov: Number(this.camera.fov.toFixed(2)),
       fogDensity: Number(this.scene.fog.density.toFixed(4)),
@@ -867,10 +989,13 @@ export class Game {
       remainingTime: Number.isFinite(this.remainingTime) ? Number(this.remainingTime.toFixed(2)) : Infinity,
       levelTransitioning: this.isLevelTransitioning,
       finished: this.isFinished,
-      postProcessing: true,
-      stormShaderIntensity: Number(this.stormAtmospherePass.uniforms.intensity.value.toFixed(3)),
+      postProcessing: Boolean(this.qualityProfile.bloom || this.qualityProfile.stormPost),
+      stormShaderIntensity: this.stormAtmospherePass.enabled
+        ? Number(this.stormAtmospherePass.uniforms.intensity.value.toFixed(3))
+        : 0,
       lightning: Number(this.stormAtmospherePass.uniforms.lightning.value.toFixed(3)),
-      bloomStrength: Number(this.bloomPass.strength.toFixed(3)),
+      bloomStrength: this.bloomPass.enabled ? Number(this.bloomPass.strength.toFixed(3)) : 0,
+      bloomEnabled: this.bloomPass.enabled,
     };
 
     Object.assign(this.diagnosticsElement.dataset, {
@@ -941,6 +1066,12 @@ export class Game {
       geometries: String(diagnostics.geometries),
       textures: String(diagnostics.textures),
       pixelRatio: String(diagnostics.pixelRatio),
+      quality: diagnostics.quality,
+      qualityLabel: diagnostics.qualityLabel,
+      qualityPixelRatioCap: String(diagnostics.qualityPixelRatioCap),
+      qualityDebrisScale: String(diagnostics.qualityDebrisScale),
+      qualityTownDetailScale: String(diagnostics.qualityTownDetailScale),
+      shadowsEnabled: String(diagnostics.shadowsEnabled),
       cameraZoomScale: String(diagnostics.cameraZoomScale),
       cameraFov: String(diagnostics.cameraFov),
       fogDensity: String(diagnostics.fogDensity),
@@ -962,6 +1093,7 @@ export class Game {
       stormShaderIntensity: String(diagnostics.stormShaderIntensity),
       lightning: String(diagnostics.lightning),
       bloomStrength: String(diagnostics.bloomStrength),
+      bloomEnabled: String(diagnostics.bloomEnabled),
     });
 
     window.__townfallDiagnostics = diagnostics;
@@ -1055,6 +1187,8 @@ export class Game {
         ['Meshes / Groups', `${formatDebugNumber(diagnostics.sceneMeshes)} / ${formatDebugNumber(diagnostics.sceneGroups)}`],
         ['Geometries / Textures', `${formatDebugNumber(diagnostics.geometries)} / ${formatDebugNumber(diagnostics.textures)}`],
         ['Pixel Ratio', formatDebugNumber(diagnostics.pixelRatio, 2)],
+        ['Quality', `${diagnostics.qualityLabel} (${formatDebugNumber(diagnostics.qualityPixelRatioCap, 2)}x cap)`],
+        ['Shadows / Bloom', `${diagnostics.shadowsEnabled ? 'on' : 'off'} / ${diagnostics.bloomEnabled ? 'on' : 'off'}`],
       ])}
       ${this.renderDebugSection('Town', [
         ['Chunks', formatDebugNumber(diagnostics.generatedChunks)],

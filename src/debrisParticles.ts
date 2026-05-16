@@ -127,6 +127,9 @@ export class DebrisParticles {
     this.recycledChunks = 0;
     this.activeParticles = 0;
     this.activeChunks = 0;
+    this.particleQualityScale = 1;
+    this.chunkQualityScale = 1;
+    this.pixelRatioCap = 1.6;
 
     this.createParticleBatch();
     this.createChunkPool();
@@ -135,6 +138,20 @@ export class DebrisParticles {
   beginFrame() {
     this.frameParticleEmissions = 0;
     this.frameChunkEmissions = 0;
+  }
+
+  setQuality({ particleScale = 1, chunkScale = 1, pixelRatioCap = 1.6 } = {}) {
+    this.particleQualityScale = THREE.MathUtils.clamp(particleScale, 0.15, 1.25);
+    this.chunkQualityScale = THREE.MathUtils.clamp(chunkScale, 0.1, 1.25);
+    this.pixelRatioCap = THREE.MathUtils.clamp(pixelRatioCap, 0.5, 1.6);
+  }
+
+  scaleParticleCount(count, minimum = 1) {
+    return Math.max(minimum, Math.round(count * this.particleQualityScale));
+  }
+
+  scaleChunkCount(count, minimum = 0) {
+    return Math.max(minimum, Math.round(count * this.chunkQualityScale));
   }
 
   createParticleBatch() {
@@ -172,7 +189,7 @@ export class DebrisParticles {
       fragmentShader: PARTICLE_FRAGMENT_SHADER,
       uniforms: {
         uTime: { value: 0 },
-        uPixelRatio: { value: Math.min(window.devicePixelRatio, 1.6) },
+        uPixelRatio: { value: Math.min(window.devicePixelRatio, this.pixelRatioCap) },
         uStormPosition: { value: new THREE.Vector3() },
         uStormRadius: { value: 8 },
         uStormStrength: { value: 0 },
@@ -224,7 +241,7 @@ export class DebrisParticles {
 
   emitGroundDust(position, radius = 2, intensity = 1) {
     const color = resolveColor('dust');
-    const particleCount = Math.min(180, Math.max(8, Math.round(radius * 6.5 * intensity)));
+    const particleCount = this.scaleParticleCount(Math.min(180, Math.max(8, Math.round(radius * 6.5 * intensity))), 4);
 
     for (let index = 0; index < particleCount; index += 1) {
       const distance = Math.sqrt(Math.random()) * radius;
@@ -250,7 +267,7 @@ export class DebrisParticles {
 
   emitStructuralBurst(position, radius = 2, materialType = 'structure', intensity = 1) {
     const color = resolveColor(materialType);
-    const particleCount = Math.min(240, Math.max(10, Math.round(radius * 12 * intensity)));
+    const particleCount = this.scaleParticleCount(Math.min(240, Math.max(10, Math.round(radius * 12 * intensity))), 5);
 
     for (let index = 0; index < particleCount; index += 1) {
       const offset = randomHorizontalVector(Math.random() * radius * 0.45);
@@ -266,7 +283,7 @@ export class DebrisParticles {
       });
     }
 
-    const chunkCount = Math.min(18, Math.max(1, Math.round(radius * 1.4 * intensity)));
+    const chunkCount = this.scaleChunkCount(Math.min(18, Math.max(1, Math.round(radius * 1.4 * intensity))), 1);
     for (let index = 0; index < chunkCount; index += 1) {
       const velocity = randomHorizontalVector(2 + Math.random() * 4.6);
       velocity.y = 2 + Math.random() * 4.2;
@@ -285,7 +302,7 @@ export class DebrisParticles {
   }
 
   emitSuctionDebris(position, stormProfile, intensity = 1, stormPosition = position) {
-    const particleCount = Math.min(160, Math.max(8, Math.round(stormProfile.category * 14 * intensity)));
+    const particleCount = this.scaleParticleCount(Math.min(160, Math.max(8, Math.round(stormProfile.category * 14 * intensity))), 3);
     const color = resolveColor('soil');
 
     for (let index = 0; index < particleCount; index += 1) {
@@ -312,7 +329,8 @@ export class DebrisParticles {
   }
 
   emitChunk({ position, velocity, color = 'structure', size = 0.35, lifetime = 2.4 }) {
-    if (this.frameChunkEmissions >= MAX_CHUNK_EMISSIONS_PER_FRAME) {
+    const frameChunkLimit = Math.max(4, Math.round(MAX_CHUNK_EMISSIONS_PER_FRAME * this.chunkQualityScale));
+    if (this.frameChunkEmissions >= frameChunkLimit) {
       this.skippedChunks += 1;
       return false;
     }
@@ -348,7 +366,8 @@ export class DebrisParticles {
   }
 
   emitParticle({ position, velocity, color, lifetime, size, swirl }) {
-    if (this.frameParticleEmissions >= MAX_PARTICLE_EMISSIONS_PER_FRAME) {
+    const frameParticleLimit = Math.max(80, Math.round(MAX_PARTICLE_EMISSIONS_PER_FRAME * this.particleQualityScale));
+    if (this.frameParticleEmissions >= frameParticleLimit) {
       this.skippedParticleEmissions += 1;
       return false;
     }
@@ -399,7 +418,7 @@ export class DebrisParticles {
   update(time, dt, stormPosition, stormProfile) {
     this.time = time;
     this.particleMaterial.uniforms.uTime.value = time;
-    this.particleMaterial.uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio, 1.6);
+    this.particleMaterial.uniforms.uPixelRatio.value = Math.min(window.devicePixelRatio, this.pixelRatioCap);
     this.particleMaterial.uniforms.uStormPosition.value.copy(stormPosition);
     this.particleMaterial.uniforms.uStormRadius.value = stormProfile.pullRadius;
     this.particleMaterial.uniforms.uStormStrength.value = THREE.MathUtils.clamp(stormProfile.category / 5, 0.15, 1.25);
@@ -519,6 +538,8 @@ export class DebrisParticles {
       emittedChunks: this.emittedChunks,
       skippedChunks: this.skippedChunks,
       recycledChunks: this.recycledChunks,
+      particleQualityScale: this.particleQualityScale,
+      chunkQualityScale: this.chunkQualityScale,
     };
   }
 }
