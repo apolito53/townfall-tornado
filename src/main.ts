@@ -1,4 +1,4 @@
-import { Game } from './game.js';
+import { Game } from './game';
 import './styles.css';
 
 const game = new Game({
@@ -40,7 +40,7 @@ document.querySelector('#mode-select-button').addEventListener('click', () => {
 });
 
 document.querySelector('#perspective-slider').addEventListener('input', (event) => {
-  game.setPerspective(Number(event.target.value) / 100);
+  game.setPerspective(Number((event.target as HTMLInputElement).value) / 100);
 });
 
 game.start();

@@ -4,11 +4,11 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { InputController } from './input.js';
-import { StormAtmosphereShader } from './stormAtmosphereShader.js';
-import { Tornado } from './tornado.js';
-import { Town } from './town.js';
-import { Hud } from './ui.js';
+import { InputController } from './input';
+import { StormAtmosphereShader } from './stormAtmosphereShader';
+import { Tornado } from './tornado';
+import { Town } from './town';
+import { Hud } from './ui';
 
 const LEVEL_COMPLETE_DELAY = 2.35;
 const MAX_RENDER_PIXEL_RATIO = 1.35;
@@ -78,6 +78,8 @@ function getCategoryIndex(category) {
 }
 
 export class Game {
+  [key: string]: any;
+
   constructor({ canvas, diagnosticsElement }) {
     this.appElement = document.querySelector('#app');
     this.startScreenElement = document.querySelector('#start-screen');

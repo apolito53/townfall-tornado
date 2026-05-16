@@ -1,4 +1,4 @@
-import { CATEGORY_MASS_REQUIREMENTS, MAX_TORNADO_CATEGORY } from './categoryProgression.js';
+import { CATEGORY_MASS_REQUIREMENTS, MAX_TORNADO_CATEGORY } from './categoryProgression';
 
 function formatNumber(value) {
   return Math.round(value).toLocaleString('en-US');
@@ -16,18 +16,31 @@ function formatTime(seconds) {
 }
 
 export class Hud {
+  levelLabel: HTMLElement;
+  levelName: HTMLElement;
+  objectiveLabel: HTMLElement;
+  levelProgressBar: HTMLElement;
+  categoryLabel: HTMLElement;
+  massLabel: HTMLElement;
+  scoreLabel: HTMLElement;
+  damageLabel: HTMLElement;
+  timeLabel: HTMLElement;
+  growthBar: HTMLElement;
+  message: HTMLElement;
+  messageTimeout: number;
+
   constructor() {
-    this.levelLabel = document.querySelector('#level-label');
-    this.levelName = document.querySelector('#level-name');
-    this.objectiveLabel = document.querySelector('#objective-label');
-    this.levelProgressBar = document.querySelector('#level-progress-bar');
-    this.categoryLabel = document.querySelector('#category-label');
-    this.massLabel = document.querySelector('#mass-label');
-    this.scoreLabel = document.querySelector('#score-label');
-    this.damageLabel = document.querySelector('#damage-label');
-    this.timeLabel = document.querySelector('#time-label');
-    this.growthBar = document.querySelector('#growth-bar');
-    this.message = document.querySelector('#storm-message');
+    this.levelLabel = document.querySelector('#level-label') as HTMLElement;
+    this.levelName = document.querySelector('#level-name') as HTMLElement;
+    this.objectiveLabel = document.querySelector('#objective-label') as HTMLElement;
+    this.levelProgressBar = document.querySelector('#level-progress-bar') as HTMLElement;
+    this.categoryLabel = document.querySelector('#category-label') as HTMLElement;
+    this.massLabel = document.querySelector('#mass-label') as HTMLElement;
+    this.scoreLabel = document.querySelector('#score-label') as HTMLElement;
+    this.damageLabel = document.querySelector('#damage-label') as HTMLElement;
+    this.timeLabel = document.querySelector('#time-label') as HTMLElement;
+    this.growthBar = document.querySelector('#growth-bar') as HTMLElement;
+    this.message = document.querySelector('#storm-message') as HTMLElement;
     this.messageTimeout = 0;
   }
 

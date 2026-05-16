@@ -12,6 +12,12 @@ const KEY_TO_DIRECTION = new Map([
 ]);
 
 export class InputController {
+  canvas: HTMLCanvasElement;
+  keys: Set<string>;
+  pointerActive: boolean;
+  pointerVector: THREE.Vector2;
+  keyboardVector: THREE.Vector2;
+
   constructor(canvas) {
     this.canvas = canvas;
     this.keys = new Set();

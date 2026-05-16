@@ -399,6 +399,8 @@ const DAMAGE_STAGE_THRESHOLDS = [0.2, 0.48, 0.74];
 const STRUCTURAL_TYPES = new Set(['House', 'Shop', 'Town Hall', 'Water Tower']);
 
 class Destructible {
+  [key: string]: any;
+
   constructor(config, position, rotation = 0) {
     this.model = config.group;
     this.group = new THREE.Group();
@@ -901,6 +903,8 @@ class Destructible {
 }
 
 export class Town {
+  [key: string]: any;
+
   constructor(scene) {
     this.scene = scene;
     this.group = new THREE.Group();

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CATEGORY_MASS_REQUIREMENTS } from './categoryProgression.js';
+import { CATEGORY_MASS_REQUIREMENTS } from './categoryProgression';
 
 const CATEGORY_THRESHOLDS = [
   { category: 1, mass: CATEGORY_MASS_REQUIREMENTS[0], radius: 3.2, pullRadius: 8, liftLimit: 12, speed: 18 },
@@ -222,6 +222,8 @@ function getCategoryProfile(mass) {
 }
 
 export class Tornado {
+  [key: string]: any;
+
   constructor(scene) {
     this.scene = scene;
     this.position = START_POSITION.clone();

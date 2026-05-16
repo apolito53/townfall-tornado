@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
     "build": "vite build",
     "verify:render": "node scripts/verify-render.mjs"
   },
@@ -13,6 +14,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
+    "typescript": "^6.0.3",
     "vite": "^7.1.12"
   }
 }
