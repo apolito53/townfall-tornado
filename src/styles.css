@@ -408,8 +408,12 @@ body {
   bottom: 14px;
   z-index: 30;
   width: min(340px, calc(100vw - 28px));
-  max-height: min(78vh, 680px);
-  overflow: auto;
+  max-height: min(680px, calc(100vh - 112px));
+  max-height: min(680px, calc(100dvh - 112px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  touch-action: pan-y;
   padding: 12px;
   border: 1px solid rgba(255, 246, 210, 0.26);
   border-radius: 8px;
@@ -423,7 +427,8 @@ body {
     "Liberation Mono",
     monospace;
   font-size: 0.72rem;
-  pointer-events: none;
+  pointer-events: auto;
+  user-select: text;
 }
 
 #diagnostics[hidden] {
@@ -431,12 +436,18 @@ body {
 }
 
 .diagnostics__header {
+  position: sticky;
+  top: -12px;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-bottom: 8px;
+  margin: -12px -12px 0;
+  padding: 12px 12px 8px;
   border-bottom: 1px solid rgba(255, 246, 210, 0.16);
+  background: rgba(10, 14, 13, 0.94);
+  backdrop-filter: blur(10px);
 }
 
 .diagnostics__header span,
@@ -551,7 +562,8 @@ body {
     bottom: 10px;
     left: 10px;
     width: auto;
-    max-height: 52vh;
+    max-height: min(68vh, calc(100vh - 92px));
+    max-height: min(68dvh, calc(100dvh - 92px));
     font-size: 0.66rem;
   }
 }

@@ -265,6 +265,39 @@ try {
     ) {
       errors.push(`${viewport.name}: debug overlay did not report performance/object diagnostics (${JSON.stringify(debugOverlay)})`);
     }
+
+    const debugPanelMetrics = await page.evaluate(() => {
+      const panel = document.querySelector('#diagnostics');
+      const rect = panel.getBoundingClientRect();
+      const style = getComputedStyle(panel);
+      panel.scrollTop = 0;
+      panel.scrollTop = panel.scrollHeight;
+
+      return {
+        top: rect.top,
+        bottom: rect.bottom,
+        viewportHeight: window.innerHeight,
+        clientHeight: panel.clientHeight,
+        scrollHeight: panel.scrollHeight,
+        scrollTopAfterScroll: panel.scrollTop,
+        overflowY: style.overflowY,
+        pointerEvents: style.pointerEvents,
+      };
+    });
+
+    if (
+      debugPanelMetrics.top < -1
+      || debugPanelMetrics.bottom > debugPanelMetrics.viewportHeight + 1
+      || debugPanelMetrics.pointerEvents !== 'auto'
+      || !['auto', 'scroll'].includes(debugPanelMetrics.overflowY)
+      || (
+        debugPanelMetrics.scrollHeight > debugPanelMetrics.clientHeight + 1
+        && debugPanelMetrics.scrollTopAfterScroll <= 0
+      )
+    ) {
+      errors.push(`${viewport.name}: debug overlay was not viewport-bounded and scrollable (${JSON.stringify(debugPanelMetrics)})`);
+    }
+
     await page.keyboard.press('F3');
     await page.waitForFunction(
       () => document.querySelector('#diagnostics')?.hidden === true,
