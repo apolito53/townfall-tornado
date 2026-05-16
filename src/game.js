@@ -13,6 +13,17 @@ import { Hud } from './ui.js';
 const LEVEL_COMPLETE_DELAY = 2.35;
 const MAX_RENDER_PIXEL_RATIO = 1.35;
 const SHADOW_MAP_SIZE = 1024;
+const MAX_SCENE_DEBRIS = 96;
+const MAX_DEBRIS_PER_FRAME = 16;
+const MAX_ABSORPTIONS_PER_FRAME = 8;
+const MIN_LEVEL_DURATION_BY_INDEX = [10, 14, 18, 22, 26];
+const LEVEL_TARGET_MULTIPLIER_BY_CATEGORY = [1, 2.4, 5.5, 12, 25];
+const LEVEL_DAMAGE_BONUS_BY_CATEGORY = [0, 0.04, 0.1, 0.17, 0.24];
+const DEBRIS_GEOMETRY = new THREE.BoxGeometry(0.45, 0.22, 0.32);
+const DEBRIS_MATERIALS = {
+  tree: new THREE.MeshStandardMaterial({ color: 0x4d8a4f, roughness: 0.88 }),
+  structure: new THREE.MeshStandardMaterial({ color: 0xd7c3a3, roughness: 0.88 }),
+};
 const LEVELS = [
   {
     name: 'First Touchdown',
@@ -58,6 +69,10 @@ function getCameraScaleForCategory(category) {
   return CAMERA_SCALE_BY_CATEGORY[Math.min(CAMERA_SCALE_BY_CATEGORY.length - 1, Math.max(0, category - 1))];
 }
 
+function getCategoryIndex(category) {
+  return Math.min(LEVEL_TARGET_MULTIPLIER_BY_CATEGORY.length - 1, Math.max(0, category - 1));
+}
+
 export class Game {
   constructor({ canvas, diagnosticsElement }) {
     this.canvas = canvas;
@@ -95,9 +110,12 @@ export class Game {
     this.tornado = new Tornado(this.scene);
     this.town = new Town(this.scene);
     this.debris = [];
+    this.pendingAbsorbedItems = [];
+    this.frameDebrisBudget = MAX_DEBRIS_PER_FRAME;
     this.levelIndex = 0;
     this.levelStartScore = 0;
     this.levelStartMass = 0;
+    this.levelElapsed = 0;
     this.levelTransitionTimer = 0;
     this.isLevelTransitioning = false;
     this.score = 0;
@@ -174,6 +192,7 @@ export class Game {
 
     this.levelStartScore = this.score;
     this.levelStartMass = startingMass;
+    this.levelElapsed = 0;
     this.remainingTime = this.currentLevel.timeLimit;
     this.combo = 1;
     this.comboTimer = 0;
@@ -190,6 +209,7 @@ export class Game {
     this.cameraLookHeight = CAMERA_SCALE_BY_CATEGORY[0].lookHeight;
     this.camera.fov = CAMERA_SCALE_BY_CATEGORY[0].fov;
     this.camera.updateProjectionMatrix();
+    this.pendingAbsorbedItems = [];
     this.clearDebris();
     this.hud.flashMessage(message ?? `Level ${this.levelIndex + 1}: ${this.currentLevel.name}`, 1.8);
   }
@@ -281,6 +301,8 @@ export class Game {
   }
 
   update(dt) {
+    this.levelElapsed += dt;
+    this.frameDebrisBudget = MAX_DEBRIS_PER_FRAME;
     this.remainingTime = Math.max(0, this.remainingTime - dt);
 
     const inputVector = this.input.getMoveVector();
@@ -304,8 +326,9 @@ export class Game {
 
     const absorbedItems = this.town.update(profile, this.tornado.position, dt);
     if (absorbedItems.length > 0) {
-      this.handleAbsorbedItems(absorbedItems);
+      this.queueAbsorbedItems(absorbedItems);
     }
+    this.processAbsorbedQueue();
 
     if (this.comboTimer > 0) {
       this.comboTimer -= dt;
@@ -315,7 +338,8 @@ export class Game {
     }
 
     const destroyedRatio = this.town.getDestroyedRatio();
-    this.checkLevelProgress(destroyedRatio);
+    const levelTargets = this.getLevelTargets();
+    this.checkLevelProgress(destroyedRatio, levelTargets);
 
     this.hud.update({
       levelNumber: this.levelIndex + 1,
@@ -325,25 +349,26 @@ export class Game {
       mass: profile.mass,
       score: this.score,
       levelScore: this.score - this.levelStartScore,
-      scoreTarget: this.currentLevel.scoreTarget,
+      scoreTarget: levelTargets.scoreTarget,
       destroyedRatio,
-      damageTarget: this.currentLevel.damageTarget,
+      damageTarget: levelTargets.damageTarget,
       remainingTime: this.remainingTime,
       isLevelTransitioning: this.isLevelTransitioning,
       isFinished: this.isFinished,
     }, dt);
   }
 
-  checkLevelProgress(destroyedRatio) {
+  checkLevelProgress(destroyedRatio, levelTargets = this.getLevelTargets()) {
     if (this.isFinished || this.isLevelTransitioning) {
       return;
     }
 
     const levelScore = this.score - this.levelStartScore;
-    const metScoreTarget = levelScore >= this.currentLevel.scoreTarget;
-    const metDamageTarget = destroyedRatio >= this.currentLevel.damageTarget;
+    const metScoreTarget = levelScore >= levelTargets.scoreTarget;
+    const metDamageTarget = destroyedRatio >= levelTargets.damageTarget;
+    const metMinimumDuration = this.levelElapsed >= this.getMinimumLevelDuration();
 
-    if (metScoreTarget && metDamageTarget) {
+    if (metScoreTarget && metDamageTarget && metMinimumDuration) {
       this.completeCurrentLevel();
       return;
     }
@@ -352,6 +377,24 @@ export class Game {
       this.isFinished = true;
       this.hud.flashMessage(`Level failed: ${this.currentLevel.name}`, 8);
     }
+  }
+
+  getMinimumLevelDuration() {
+    return MIN_LEVEL_DURATION_BY_INDEX[Math.min(MIN_LEVEL_DURATION_BY_INDEX.length - 1, this.levelIndex)];
+  }
+
+  getLevelTargets() {
+    const profile = this.currentStormProfile ?? this.tornado.getProfile();
+    const categoryIndex = getCategoryIndex(profile.category);
+    const overgrowth = THREE.MathUtils.clamp((profile.radius - 36) / 36, 0, 5);
+    const scoreTarget = Math.round(this.currentLevel.scoreTarget * LEVEL_TARGET_MULTIPLIER_BY_CATEGORY[categoryIndex] * (1 + overgrowth));
+    const damageTarget = THREE.MathUtils.clamp(
+      this.currentLevel.damageTarget + LEVEL_DAMAGE_BONUS_BY_CATEGORY[categoryIndex] + overgrowth * 0.035,
+      this.currentLevel.damageTarget,
+      0.82,
+    );
+
+    return { scoreTarget, damageTarget };
   }
 
   completeCurrentLevel() {
@@ -376,7 +419,17 @@ export class Game {
     });
   }
 
-  handleAbsorbedItems(items) {
+  queueAbsorbedItems(items) {
+    this.pendingAbsorbedItems.push(...items);
+  }
+
+  processAbsorbedQueue() {
+    const processCount = Math.min(MAX_ABSORPTIONS_PER_FRAME, this.pendingAbsorbedItems.length);
+    if (processCount <= 0) {
+      return;
+    }
+
+    const items = this.pendingAbsorbedItems.splice(0, processCount);
     for (const item of items) {
       const comboBonus = Math.min(5, this.combo);
       this.score += item.points * comboBonus;
@@ -442,17 +495,18 @@ export class Game {
   }
 
   spawnDebrisBurst(position, radius, type) {
-    const material = new THREE.MeshStandardMaterial({
-      color: type === 'Tree' ? 0x4d8a4f : 0xd7c3a3,
-      roughness: 0.88,
-      transparent: true,
-      opacity: 0.85,
-    });
-    const geometry = new THREE.BoxGeometry(0.45, 0.22, 0.32);
-    const count = Math.min(18, Math.max(6, Math.round(radius * 2.2)));
+    const availableSceneSlots = MAX_SCENE_DEBRIS - this.debris.length;
+    const availableFrameSlots = this.frameDebrisBudget;
+    const count = Math.min(availableSceneSlots, availableFrameSlots, Math.min(6, Math.max(2, Math.round(radius * 0.9))));
+    if (count <= 0) {
+      return;
+    }
+
+    this.frameDebrisBudget -= count;
+    const material = type === 'Tree' ? DEBRIS_MATERIALS.tree : DEBRIS_MATERIALS.structure;
 
     for (let index = 0; index < count; index += 1) {
-      const shard = new THREE.Mesh(geometry, material);
+      const shard = new THREE.Mesh(DEBRIS_GEOMETRY, material);
       shard.position.copy(position);
       shard.position.y += 0.4 + Math.random() * 1.1;
       shard.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
@@ -462,7 +516,7 @@ export class Game {
         (Math.random() - 0.5) * 7,
       );
       shard.userData.life = 0.75 + Math.random() * 0.5;
-      shard.castShadow = true;
+      shard.castShadow = false;
       this.scene.add(shard);
       this.debris.push(shard);
     }
@@ -476,7 +530,6 @@ export class Game {
       shard.position.addScaledVector(shard.userData.velocity, dt);
       shard.rotation.x += dt * 5.2;
       shard.rotation.y += dt * 4.8;
-      shard.material.opacity = Math.max(0, shard.userData.life);
 
       if (shard.userData.life <= 0 || shard.position.y < -1) {
         this.scene.remove(shard);
@@ -531,6 +584,7 @@ export class Game {
 
     const townStats = this.town.lastUpdateStats;
     const renderBudgetStats = this.town.lastRenderBudgetStats;
+    const levelTargets = this.getLevelTargets();
     const diagnostics = {
       renderOk: visibleSamples >= 3 && renderInfo.calls > 0,
       sampledPixels: this.pixelDiagnosticsEnabled ? `${visibleSamples}/${samplePoints.length}` : 'skipped',
@@ -539,11 +593,16 @@ export class Game {
       tornadoX: Number(this.tornado.position.x.toFixed(2)),
       tornadoZ: Number(this.tornado.position.z.toFixed(2)),
       debrisCount: this.debris.length,
+      pendingAbsorptions: this.pendingAbsorbedItems.length,
       generatedChunks: this.town.generatedChunks.size,
       totalItems: townStats.totalItems,
       candidateItems: townStats.candidateItems,
       activeItems: townStats.activeItems,
       simulatedItems: townStats.simulatedItems,
+      throttledCandidates: townStats.throttledCandidates,
+      absorbedItems: townStats.absorbedItems,
+      effectPieces: townStats.effectPieces,
+      skippedEffectPieces: townStats.skippedEffectPieces,
       visibleItems: renderBudgetStats.visibleItems,
       visibleParts: renderBudgetStats.visibleParts,
       totalParts: renderBudgetStats.totalParts,
@@ -559,8 +618,10 @@ export class Game {
       levelNumber: this.levelIndex + 1,
       levelName: this.currentLevel.name,
       levelScore: Math.round(this.score - this.levelStartScore),
-      levelScoreTarget: this.currentLevel.scoreTarget,
-      levelDamageTarget: this.currentLevel.damageTarget,
+      levelScoreTarget: levelTargets.scoreTarget,
+      levelDamageTarget: levelTargets.damageTarget,
+      levelElapsed: Number(this.levelElapsed.toFixed(2)),
+      minimumLevelDuration: this.getMinimumLevelDuration(),
       levelTransitioning: this.isLevelTransitioning,
       finished: this.isFinished,
       postProcessing: true,
@@ -577,11 +638,16 @@ export class Game {
       tornadoX: String(diagnostics.tornadoX),
       tornadoZ: String(diagnostics.tornadoZ),
       debrisCount: String(diagnostics.debrisCount),
+      pendingAbsorptions: String(diagnostics.pendingAbsorptions),
       generatedChunks: String(diagnostics.generatedChunks),
       totalItems: String(diagnostics.totalItems),
       candidateItems: String(diagnostics.candidateItems),
       activeItems: String(diagnostics.activeItems),
       simulatedItems: String(diagnostics.simulatedItems),
+      throttledCandidates: String(diagnostics.throttledCandidates),
+      absorbedItems: String(diagnostics.absorbedItems),
+      effectPieces: String(diagnostics.effectPieces),
+      skippedEffectPieces: String(diagnostics.skippedEffectPieces),
       visibleItems: String(diagnostics.visibleItems),
       visibleParts: String(diagnostics.visibleParts),
       totalParts: String(diagnostics.totalParts),
@@ -599,6 +665,8 @@ export class Game {
       levelScore: String(diagnostics.levelScore),
       levelScoreTarget: String(diagnostics.levelScoreTarget),
       levelDamageTarget: String(diagnostics.levelDamageTarget),
+      levelElapsed: String(diagnostics.levelElapsed),
+      minimumLevelDuration: String(diagnostics.minimumLevelDuration),
       levelTransitioning: String(diagnostics.levelTransitioning),
       finished: String(diagnostics.finished),
       postProcessing: String(diagnostics.postProcessing),

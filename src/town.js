@@ -11,6 +11,12 @@ const SIMULATION_CELL_SIZE = 24;
 const MAX_INTERACTION_RADIUS = 12;
 const DETAIL_LOD_RADIUS_BY_CATEGORY = [64, 76, 88, 100, 116];
 const MINOR_PROP_RADIUS_BY_CATEGORY = [76, 88, 104, 122, 146];
+const FRAME_DYNAMIC_PIECE_BUDGET = 72;
+const FRAME_STATIC_PIECE_BUDGET = 36;
+const FRAME_COLLAPSE_SCAR_BUDGET = 8;
+const STRUCTURAL_GENERATED_PIECE_LIMIT = 34;
+const MINOR_GENERATED_PIECE_LIMIT = 12;
+const MAX_TOWN_ITEMS_UPDATED_PER_FRAME = 460;
 
 const MATERIALS = {
   grass: new THREE.MeshStandardMaterial({ color: 0x5c8f5c, roughness: 0.95 }),
@@ -83,6 +89,30 @@ function createSimulationStats() {
     candidateItems: 0,
     activeItems: 0,
     simulatedItems: 0,
+    throttledCandidates: 0,
+    absorbedItems: 0,
+    effectPieces: 0,
+    skippedEffectPieces: 0,
+  };
+}
+
+function createEffectBudget() {
+  return {
+    dynamicPieces: FRAME_DYNAMIC_PIECE_BUDGET,
+    staticPieces: FRAME_STATIC_PIECE_BUDGET,
+    createdPieces: 0,
+    skippedPieces: 0,
+    usePiece(dynamic) {
+      const poolName = dynamic ? 'dynamicPieces' : 'staticPieces';
+      if (this[poolName] <= 0) {
+        this.skippedPieces += 1;
+        return false;
+      }
+
+      this[poolName] -= 1;
+      this.createdPieces += 1;
+      return true;
+    },
   };
 }
 
@@ -457,7 +487,7 @@ class Destructible {
     }
   }
 
-  update(stormProfile, stormPosition, dt) {
+  update(stormProfile, stormPosition, dt, effectBudget = null) {
     this.group.visible = true;
     this.updateGeneratedPieces(dt);
 
@@ -478,7 +508,7 @@ class Destructible {
     const inward = distance > 0.01 ? offset.clone().normalize() : this.lastPullDirection.clone();
     this.lastPullDirection.copy(inward);
     const pullRatio = THREE.MathUtils.clamp(1 - distance / (stormProfile.pullRadius + this.radius), 0, 1);
-    const collapsedFromStress = this.applyStormStress(stormProfile, stormPosition, pullRatio, dt);
+    const collapsedFromStress = this.applyStormStress(stormProfile, stormPosition, pullRatio, dt, effectBudget);
 
     if (collapsedFromStress) {
       return this;
@@ -517,7 +547,7 @@ class Destructible {
     return null;
   }
 
-  applyStormStress(stormProfile, stormPosition, pullRatio, dt) {
+  applyStormStress(stormProfile, stormPosition, pullRatio, dt, effectBudget) {
     const stormForce = pullRatio * (stormProfile.pullStrength + stormProfile.liftLimit * 0.34);
     const stability = this.massRequired * (this.isStructural ? 0.46 : 0.36) + this.radius * 2.35;
     const stress = Math.max(0, stormForce - stability);
@@ -530,31 +560,31 @@ class Destructible {
     const damageCeiling = canFullyFail ? 1 : 0.68;
     const damageRate = (stress / this.integrity) * (0.72 + pullRatio * 0.85);
     this.damage = Math.min(damageCeiling, this.damage + damageRate * dt);
-    this.releaseDamageStages(stormPosition);
+    this.releaseDamageStages(stormPosition, effectBudget);
 
     if (this.isStructural) {
-      this.emitPressureBurst(stormProfile, stormPosition, stormForce, pullRatio, dt);
+      this.emitPressureBurst(stormProfile, stormPosition, stormForce, pullRatio, dt, effectBudget);
     }
 
     if (this.isStructural && this.damage >= 1 && canFullyFail) {
-      this.collapseIntoWreckage(stormPosition, stormProfile);
+      this.collapseIntoWreckage(stormPosition, stormProfile, effectBudget);
       return true;
     }
 
     return false;
   }
 
-  releaseDamageStages(stormPosition) {
+  releaseDamageStages(stormPosition, effectBudget) {
     while (
       this.damageStage < DAMAGE_STAGE_THRESHOLDS.length
       && this.damage >= DAMAGE_STAGE_THRESHOLDS[this.damageStage]
     ) {
       this.damageStage += 1;
-      this.shedDamageStage(this.damageStage, stormPosition);
+      this.shedDamageStage(this.damageStage, stormPosition, effectBudget);
     }
   }
 
-  emitPressureBurst(stormProfile, stormPosition, stormForce, pullRatio, dt) {
+  emitPressureBurst(stormProfile, stormPosition, stormForce, pullRatio, dt, effectBudget) {
     if (pullRatio < 0.3 || this.damage < 0.08) {
       return;
     }
@@ -570,7 +600,7 @@ class Destructible {
     const towardStorm = stormLocal.lengthSq() > 0.01
       ? stormLocal.normalize()
       : this.lastPullDirection.clone();
-    const chunkCount = Math.min(7, Math.max(2, Math.ceil(this.damage * 5 + pullRatio * 4)));
+    const chunkCount = Math.min(3, Math.max(1, Math.ceil(this.damage * 2.2 + pullRatio * 2)));
     const baseSize = THREE.MathUtils.clamp(0.16 + stormForce * 0.004, 0.2, 0.58);
 
     for (let index = 0; index < chunkCount; index += 1) {
@@ -589,11 +619,12 @@ class Destructible {
         stormPosition,
         true,
         true,
+        effectBudget,
       );
     }
   }
 
-  shedDamageStage(stage, stormPosition) {
+  shedDamageStage(stage, stormPosition, effectBudget) {
     const targetRoles = stage === 1
       ? ['detail', 'wheel']
       : ['roof', 'canopy', 'detail'];
@@ -605,7 +636,7 @@ class Destructible {
     for (const part of partsToBreak) {
       part.damageVisible = false;
       part.mesh.visible = false;
-      this.createFragmentsFromPart(part, 2 + stage * 2, stormPosition);
+      this.createFragmentsFromPart(part, 1 + stage, stormPosition, effectBudget);
     }
 
     if (partsToBreak.length === 0) {
@@ -614,34 +645,38 @@ class Destructible {
         0.65 + Math.random() * 0.8,
         (Math.random() - 0.5) * this.radius,
       );
-      this.createFragmentCluster(fallbackPosition, MATERIALS.rubbleDark, 3 + stage * 2, stormPosition, 0.28);
+      this.createFragmentCluster(fallbackPosition, MATERIALS.rubbleDark, 1 + stage, stormPosition, 0.28, effectBudget);
     }
   }
 
-  createFragmentsFromPart(part, count, stormPosition) {
+  createFragmentsFromPart(part, count, stormPosition, effectBudget) {
     const baseSize = Math.max(0.12, Math.min(0.55, Math.max(part.size.x, part.size.y, part.size.z) * 0.22));
-    this.createFragmentCluster(part.originalPosition, part.material, count, stormPosition, baseSize);
+    this.createFragmentCluster(part.originalPosition, part.material, count, stormPosition, baseSize, effectBudget);
   }
 
-  createFragmentCluster(localPosition, material, count, stormPosition, baseSize) {
+  createFragmentCluster(localPosition, material, count, stormPosition, baseSize, effectBudget) {
     for (let index = 0; index < count; index += 1) {
       const jitter = new THREE.Vector3(
         (Math.random() - 0.5) * baseSize * 3,
         (Math.random() - 0.5) * baseSize * 2,
         (Math.random() - 0.5) * baseSize * 3,
       );
-      this.createGeneratedPiece(localPosition.clone().add(jitter), material, baseSize, stormPosition, true);
+      this.createGeneratedPiece(localPosition.clone().add(jitter), material, baseSize, stormPosition, true, false, effectBudget);
     }
   }
 
-  createGeneratedPiece(localPosition, material, baseSize, stormPosition, dynamic, pulledTowardStorm = false) {
+  createGeneratedPiece(localPosition, material, baseSize, stormPosition, dynamic, pulledTowardStorm = false, effectBudget = null) {
+    if (effectBudget && !effectBudget.usePiece(dynamic)) {
+      return null;
+    }
+
     const piece = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material ?? MATERIALS.rubbleDark);
     const size = baseSize * (0.55 + Math.random() * 1.5);
     piece.scale.set(size * (0.7 + Math.random()), size * (0.35 + Math.random() * 0.8), size * (0.7 + Math.random()));
     piece.position.copy(localPosition);
     piece.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-    piece.castShadow = true;
-    piece.receiveShadow = true;
+    piece.castShadow = false;
+    piece.receiveShadow = false;
 
     const stormLocal = this.group.worldToLocal(stormPosition.clone());
     const direction = pulledTowardStorm
@@ -663,14 +698,20 @@ class Destructible {
     piece.userData.floorY = piece.scale.y * 0.5;
     this.group.add(piece);
     this.generatedPieces.push(piece);
-    this.limitGeneratedPieces(this.isStructural ? 130 : 36);
+    this.limitGeneratedPieces(this.isStructural ? STRUCTURAL_GENERATED_PIECE_LIMIT : MINOR_GENERATED_PIECE_LIMIT);
+    return piece;
   }
 
   limitGeneratedPieces(maxPieces) {
     while (this.generatedPieces.length > maxPieces) {
       const oldestPiece = this.generatedPieces.shift();
       this.group.remove(oldestPiece);
+      this.disposeGeneratedPiece(oldestPiece);
     }
+  }
+
+  disposeGeneratedPiece(piece) {
+    piece.geometry?.dispose();
   }
 
   updateGeneratedPieces(dt) {
@@ -708,11 +749,12 @@ class Destructible {
   removeGeneratedPieces() {
     for (const piece of this.generatedPieces) {
       this.group.remove(piece);
+      this.disposeGeneratedPiece(piece);
     }
     this.generatedPieces = [];
   }
 
-  collapseIntoWreckage(stormPosition, stormProfile) {
+  collapseIntoWreckage(stormPosition, stormProfile, effectBudget) {
     this.destroyed = true;
     this.isLifted = false;
     this.velocity.set(0, 0, 0);
@@ -721,7 +763,7 @@ class Destructible {
     this.group.rotation.copy(this.baseRotation);
     this.group.scale.copy(this.baseScale);
 
-    const rubbleCount = Math.min(48, Math.max(14, Math.round(this.radius * 5.4)));
+    const rubbleCount = Math.min(18, Math.max(6, Math.round(this.radius * 2.2)));
     const baseSize = THREE.MathUtils.clamp(this.radius * 0.11, 0.28, 0.9);
 
     for (let index = 0; index < rubbleCount; index += 1) {
@@ -733,17 +775,17 @@ class Destructible {
         Math.sin(angle) * distance,
       );
       const sourcePart = this.parts[index % this.parts.length];
-      this.createGeneratedPiece(localPosition, sourcePart?.material ?? MATERIALS.rubbleDark, baseSize, stormPosition, true);
+      this.createGeneratedPiece(localPosition, sourcePart?.material ?? MATERIALS.rubbleDark, baseSize, stormPosition, true, false, effectBudget);
     }
 
     // A few heavier slabs stay near the footprint, which reads more like collapse than confetti.
-    for (let index = 0; index < Math.ceil(this.radius / 1.8); index += 1) {
+    for (let index = 0; index < Math.min(3, Math.ceil(this.radius / 2.8)); index += 1) {
       const slabPosition = new THREE.Vector3(
         (Math.random() - 0.5) * this.radius,
         0.12,
         (Math.random() - 0.5) * this.radius,
       );
-      this.createGeneratedPiece(slabPosition, MATERIALS.rubbleDark, baseSize * 1.7, stormPosition, false);
+      this.createGeneratedPiece(slabPosition, MATERIALS.rubbleDark, baseSize * 1.7, stormPosition, false, false, effectBudget);
     }
 
     this.damage = 1;
@@ -878,6 +920,7 @@ export class Town {
     this.items = [];
     this.itemBuckets = new Map();
     this.activeItems = new Set();
+    this.simulationCursor = 0;
     this.lastUpdateStats = createSimulationStats();
     this.lastRenderBudgetStats = createRenderBudgetStats();
     this.groundScars = [];
@@ -898,6 +941,7 @@ export class Town {
       item.reset();
     }
     this.activeItems.clear();
+    this.simulationCursor = 0;
     this.lastUpdateStats = createSimulationStats();
     this.lastRenderBudgetStats = createRenderBudgetStats();
     this.clearGroundDamage();
@@ -905,17 +949,23 @@ export class Town {
 
   update(stormProfile, stormPosition, dt) {
     const absorbedItems = [];
+    const effectBudget = createEffectBudget();
+    let collapseScarsRemaining = FRAME_COLLAPSE_SCAR_BUDGET;
     this.applyStormGroundDamage(stormPosition, stormProfile, dt);
 
     const candidateItems = this.collectNearbyItems(stormPosition, stormProfile.pullRadius + MAX_INTERACTION_RADIUS);
-    const itemsToUpdate = new Set([...candidateItems, ...this.activeItems]);
+    const activeItemCount = this.activeItems.size;
+    const itemsToUpdate = this.selectItemsForSimulation(candidateItems);
     this.activeItems.clear();
 
     for (const item of itemsToUpdate) {
-      const absorbed = item.update(stormProfile, stormPosition, dt);
+      const absorbed = item.update(stormProfile, stormPosition, dt, effectBudget);
       if (absorbed) {
         absorbedItems.push(absorbed);
-        this.addCollapseScar(absorbed.group.position, absorbed.radius, absorbed.isStructural ? 1 : 0.45);
+        if (collapseScarsRemaining > 0) {
+          this.addCollapseScar(absorbed.group.position, absorbed.radius, absorbed.isStructural ? 1 : 0.45);
+          collapseScarsRemaining -= 1;
+        }
       }
 
       if (item.needsOngoingSimulation()) {
@@ -927,10 +977,35 @@ export class Town {
       totalItems: this.items.length,
       candidateItems: candidateItems.size,
       activeItems: this.activeItems.size,
-      simulatedItems: itemsToUpdate.size,
+      simulatedItems: itemsToUpdate.length,
+      throttledCandidates: Math.max(0, candidateItems.size + activeItemCount - itemsToUpdate.length),
+      absorbedItems: absorbedItems.length,
+      effectPieces: effectBudget.createdPieces,
+      skippedEffectPieces: effectBudget.skippedPieces,
     };
 
     return absorbedItems;
+  }
+
+  selectItemsForSimulation(candidateItems) {
+    const activeItems = [...this.activeItems];
+    const activeSet = new Set(activeItems);
+    const inactiveCandidates = [...candidateItems].filter((item) => !activeSet.has(item));
+    const availableCandidateSlots = Math.max(0, MAX_TOWN_ITEMS_UPDATED_PER_FRAME - activeItems.length);
+
+    if (inactiveCandidates.length <= availableCandidateSlots) {
+      this.simulationCursor = 0;
+      return [...activeItems, ...inactiveCandidates];
+    }
+
+    const selectedCandidates = [];
+    const startCursor = this.simulationCursor % inactiveCandidates.length;
+    for (let index = 0; index < availableCandidateSlots; index += 1) {
+      selectedCandidates.push(inactiveCandidates[(startCursor + index) % inactiveCandidates.length]);
+    }
+
+    this.simulationCursor = (startCursor + availableCandidateSlots) % inactiveCandidates.length;
+    return [...activeItems, ...selectedCandidates];
   }
 
   collectNearbyItems(position, radius) {
@@ -1171,7 +1246,7 @@ export class Town {
     this.groundDamageGroup.add(scar);
     this.groundScars.push(scar);
 
-    const maxScars = 180;
+    const maxScars = 120;
     while (this.groundScars.length > maxScars) {
       const oldScar = this.groundScars.shift();
       this.groundDamageGroup.remove(oldScar);

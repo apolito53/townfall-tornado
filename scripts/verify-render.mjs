@@ -163,6 +163,22 @@ try {
       errors.push(`${viewport.name}: spatial simulation culling was not active (${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems})`);
     }
 
+    if (upgradedDiagnostics.debrisCount > 96) {
+      errors.push(`${viewport.name}: scene debris cap was exceeded (${upgradedDiagnostics.debrisCount})`);
+    }
+
+    if (upgradedDiagnostics.effectPieces > 108) {
+      errors.push(`${viewport.name}: town effect budget was exceeded (${upgradedDiagnostics.effectPieces})`);
+    }
+
+    if (upgradedDiagnostics.minimumLevelDuration <= 0) {
+      errors.push(`${viewport.name}: minimum level duration diagnostics were not active`);
+    }
+
+    if (upgradedDiagnostics.levelNumber !== 1 || upgradedDiagnostics.levelTransitioning === true) {
+      errors.push(`${viewport.name}: level advanced before the minimum duration gate (${JSON.stringify(upgradedDiagnostics)})`);
+    }
+
     if (upgradedDiagnostics.visibleParts <= 0 || upgradedDiagnostics.visibleParts >= upgradedDiagnostics.totalParts) {
       errors.push(`${viewport.name}: render LOD budget was not active (${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts})`);
     }
@@ -177,6 +193,27 @@ try {
 
     if (upgradedDiagnostics.stormShaderIntensity <= 0 || upgradedDiagnostics.bloomStrength <= 0) {
       errors.push(`${viewport.name}: shader stack did not report active intensity/bloom (${JSON.stringify(upgradedDiagnostics)})`);
+    }
+
+    await page.evaluate(() => {
+      const game = window.__townfallGame;
+      game.tornado.mass = 12000;
+      game.tornado.position.set(0, 0, 0);
+      game.tornado.group.position.copy(game.tornado.position);
+      game.currentStormProfile = game.tornado.getProfile();
+    });
+    await page.waitForTimeout(900);
+    const stressDiagnostics = await page.evaluate(() => window.__townfallDiagnostics);
+    if (stressDiagnostics.simulatedItems > 560) {
+      errors.push(`${viewport.name}: huge storm simulation budget was exceeded (${stressDiagnostics.simulatedItems})`);
+    }
+
+    if (stressDiagnostics.effectPieces > 108 || stressDiagnostics.debrisCount > 96) {
+      errors.push(`${viewport.name}: huge storm effect/debris caps were exceeded (${JSON.stringify(stressDiagnostics)})`);
+    }
+
+    if (stressDiagnostics.levelNumber !== 1 || stressDiagnostics.levelTransitioning === true) {
+      errors.push(`${viewport.name}: huge storm advanced the level too early (${JSON.stringify(stressDiagnostics)})`);
     }
 
     if (!levelUi.levelLabel.includes('Level') || levelUi.levelName.length === 0 || !levelUi.objectiveLabel.includes('Goal')) {
@@ -194,8 +231,10 @@ try {
         return false;
       }
 
-      game.score = game.levelStartScore + game.currentLevel.scoreTarget;
-      const destroyCount = Math.ceil(game.town.items.length * game.currentLevel.damageTarget);
+      const targets = game.getLevelTargets();
+      game.score = game.levelStartScore + targets.scoreTarget;
+      game.levelElapsed = Math.max(game.levelElapsed, game.getMinimumLevelDuration());
+      const destroyCount = Math.ceil(game.town.items.length * targets.damageTarget);
       for (const item of game.town.items.slice(0, destroyCount)) {
         item.destroyed = true;
       }
@@ -239,7 +278,7 @@ try {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);
     }
 
-    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, chunks ${upgradedDiagnostics.generatedChunks}, simulated ${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems}, visible parts ${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts}, draw calls ${upgradedDiagnostics.drawCalls}, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
+    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, chunks ${upgradedDiagnostics.generatedChunks}, simulated ${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems}, effects ${upgradedDiagnostics.effectPieces}, debris ${upgradedDiagnostics.debrisCount}, visible parts ${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts}, draw calls ${upgradedDiagnostics.drawCalls}, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
     await page.close();
   }
 } finally {
