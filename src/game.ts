@@ -6,6 +6,7 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { DebrisParticles } from './debrisParticles';
 import { InputController } from './input';
+import { detectPlatformQuality } from './platformQuality';
 import { StormAtmosphereShader } from './stormAtmosphereShader';
 import { Tornado } from './tornado';
 import { Town } from './town';
@@ -24,11 +25,11 @@ const GAME_MODES = {
   LEVELS: 'levels',
   ENDLESS: 'endless',
 };
-const DEFAULT_QUALITY = 'high';
+const DEFAULT_QUALITY_MODE = 'auto';
 // Quality presets intentionally touch several systems. Pixel ratio is the big
 // GPU lever, while debris/detail distance keep the huge-storm cases from
 // turning weaker machines into a slideshow.
-const QUALITY_SETTINGS = {
+const QUALITY_PRESETS = {
   low: {
     label: 'Low',
     pixelRatioCap: 0.75,
@@ -67,6 +68,14 @@ const QUALITY_SETTINGS = {
     townDetailScale: 1,
     renderBudgetInterval: 0.32,
   },
+};
+const CUSTOM_QUALITY_DEFAULTS = {
+  renderScale: 100,
+  effectsScale: 100,
+  townDetailScale: 100,
+  stormFxScale: 100,
+  shadows: true,
+  bloom: true,
 };
 const LEVELS = [
   {
@@ -117,8 +126,65 @@ function getCategoryIndex(category) {
   return Math.min(LEVEL_TARGET_MULTIPLIER_BY_CATEGORY.length - 1, Math.max(0, category - 1));
 }
 
-function normalizeQualityKey(quality) {
-  return QUALITY_SETTINGS[quality] ? quality : DEFAULT_QUALITY;
+function normalizeQualityMode(mode) {
+  if (mode === 'auto' || mode === 'custom' || QUALITY_PRESETS[mode]) {
+    return mode;
+  }
+
+  return DEFAULT_QUALITY_MODE;
+}
+
+function clampPercent(value, fallback, min, max) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return THREE.MathUtils.clamp(Math.round(numeric), min, max);
+}
+
+function sanitizeCustomQualitySettings(rawSettings: any = {}) {
+  return {
+    renderScale: clampPercent(rawSettings.renderScale, CUSTOM_QUALITY_DEFAULTS.renderScale, 50, 135),
+    effectsScale: clampPercent(rawSettings.effectsScale, CUSTOM_QUALITY_DEFAULTS.effectsScale, 25, 100),
+    townDetailScale: clampPercent(rawSettings.townDetailScale, CUSTOM_QUALITY_DEFAULTS.townDetailScale, 45, 115),
+    stormFxScale: clampPercent(rawSettings.stormFxScale, CUSTOM_QUALITY_DEFAULTS.stormFxScale, 0, 100),
+    shadows: typeof rawSettings.shadows === 'boolean' ? rawSettings.shadows : CUSTOM_QUALITY_DEFAULTS.shadows,
+    bloom: typeof rawSettings.bloom === 'boolean' ? rawSettings.bloom : CUSTOM_QUALITY_DEFAULTS.bloom,
+  };
+}
+
+function customSettingsFromProfile(profile) {
+  return sanitizeCustomQualitySettings({
+    renderScale: Math.round(profile.pixelRatioCap * 100),
+    effectsScale: Math.round(profile.debrisScale * 100),
+    townDetailScale: Math.round(profile.townDetailScale * 100),
+    stormFxScale: Math.round((profile.stormPostScale ?? (profile.stormPost ? 1 : 0)) * 100),
+    shadows: profile.shadows,
+    bloom: profile.bloom,
+  });
+}
+
+function createCustomQualityProfile(settings) {
+  const safeSettings = sanitizeCustomQualitySettings(settings);
+  const stormPostScale = safeSettings.stormFxScale / 100;
+  const effectsScale = safeSettings.effectsScale / 100;
+  const pixelRatioCap = safeSettings.renderScale / 100;
+
+  return {
+    label: 'Custom',
+    pixelRatioCap,
+    shadows: safeSettings.shadows,
+    shadowMapSize: safeSettings.shadows ? (pixelRatioCap >= 1 ? SHADOW_MAP_SIZE : 768) : 0,
+    bloom: safeSettings.bloom,
+    stormPost: stormPostScale > 0,
+    stormPostScale,
+    debrisScale: effectsScale,
+    chunkScale: effectsScale,
+    townDetailScale: safeSettings.townDetailScale / 100,
+    renderBudgetInterval: THREE.MathUtils.lerp(0.5, 0.32, safeSettings.townDetailScale / 115),
+    manualSettings: safeSettings,
+  };
 }
 
 function createPerformanceStats() {
@@ -175,13 +241,19 @@ export class Game {
     this.retryLevelButtonElement = document.querySelector('#retry-level-button');
     this.restartButtonElement = document.querySelector('#restart-button');
     this.qualityButtons = [...document.querySelectorAll('[data-quality-option]')];
+    this.qualitySliders = [...document.querySelectorAll('[data-quality-slider]')];
+    this.qualityToggles = [...document.querySelectorAll('[data-quality-toggle]')];
+    this.qualitySummaries = [...document.querySelectorAll('[data-quality-summary]')];
     this.canvas = canvas;
     this.diagnosticsElement = diagnosticsElement;
     this.pixelDiagnosticsEnabled = new URLSearchParams(window.location.search).has('pixelDiagnostics');
     this.debugOverlayVisible = new URLSearchParams(window.location.search).has('debug')
       || window.localStorage.getItem('townfall.debugOverlay') === 'true';
-    this.qualityKey = normalizeQualityKey(window.localStorage.getItem('townfall.quality') ?? DEFAULT_QUALITY);
-    this.qualityProfile = QUALITY_SETTINGS[this.qualityKey];
+    this.platformQuality = detectPlatformQuality();
+    this.qualityMode = this.loadQualityMode();
+    this.customQualitySettings = this.loadCustomQualitySettings();
+    this.qualityKey = this.getEffectiveQualityKey();
+    this.qualityProfile = this.resolveQualityProfile();
     this.performanceStats = createPerformanceStats();
     this.lastSceneStats = createSceneStats();
     this.clock = new THREE.Clock();
@@ -399,12 +471,62 @@ export class Game {
     this.perspectiveAmount = THREE.MathUtils.clamp(amount, 0, 1);
   }
 
-  setQuality(qualityKey, { persist = true } = {}) {
-    this.qualityKey = normalizeQualityKey(qualityKey);
-    this.qualityProfile = QUALITY_SETTINGS[this.qualityKey];
+  loadQualityMode() {
+    const storedMode = window.localStorage.getItem('townfall.qualityMode');
+    const legacyQuality = window.localStorage.getItem('townfall.quality');
+    return normalizeQualityMode(storedMode ?? legacyQuality ?? DEFAULT_QUALITY_MODE);
+  }
+
+  loadCustomQualitySettings() {
+    try {
+      return sanitizeCustomQualitySettings(JSON.parse(window.localStorage.getItem('townfall.qualityCustom') ?? '{}'));
+    } catch {
+      return sanitizeCustomQualitySettings();
+    }
+  }
+
+  getEffectiveQualityKey(mode = this.qualityMode) {
+    if (mode === 'auto') {
+      return this.platformQuality.recommendedQuality;
+    }
+
+    return QUALITY_PRESETS[mode] ? mode : mode;
+  }
+
+  resolveQualityProfile(mode = this.qualityMode) {
+    if (mode === 'custom') {
+      return createCustomQualityProfile(this.customQualitySettings);
+    }
+
+    const effectiveQualityKey = this.getEffectiveQualityKey(mode);
+    return QUALITY_PRESETS[effectiveQualityKey] ?? QUALITY_PRESETS.medium;
+  }
+
+  setQuality(qualityMode, options = {}) {
+    this.setQualityMode(qualityMode, options);
+  }
+
+  setQualityMode(qualityMode, { persist = true } = {}) {
+    this.qualityMode = normalizeQualityMode(qualityMode);
+    this.qualityKey = this.getEffectiveQualityKey();
+    this.qualityProfile = this.resolveQualityProfile();
 
     if (persist) {
-      window.localStorage.setItem('townfall.quality', this.qualityKey);
+      window.localStorage.setItem('townfall.qualityMode', this.qualityMode);
+    }
+
+    this.applyQualitySettings();
+  }
+
+  setCustomQualitySettings(settings, { persist = true } = {}) {
+    this.customQualitySettings = sanitizeCustomQualitySettings(settings);
+    this.qualityMode = 'custom';
+    this.qualityKey = 'custom';
+    this.qualityProfile = createCustomQualityProfile(this.customQualitySettings);
+
+    if (persist) {
+      window.localStorage.setItem('townfall.qualityMode', this.qualityMode);
+      window.localStorage.setItem('townfall.qualityCustom', JSON.stringify(this.customQualitySettings));
     }
 
     this.applyQualitySettings();
@@ -450,10 +572,110 @@ export class Game {
 
   syncQualityControls() {
     for (const button of this.qualityButtons) {
-      const isCurrent = button.dataset.qualityOption === this.qualityKey;
+      const isCurrent = button.dataset.qualityOption === this.qualityMode;
       button.setAttribute('aria-pressed', String(isCurrent));
       button.classList.toggle('quality-button--active', isCurrent);
     }
+
+    const manualSettings = customSettingsFromProfile(this.qualityProfile);
+    for (const slider of this.qualitySliders) {
+      const sliderElement = slider as HTMLInputElement;
+      const settingName = slider.dataset.qualitySlider;
+      if (!settingName || manualSettings[settingName] === undefined) {
+        continue;
+      }
+
+      sliderElement.value = String(manualSettings[settingName]);
+    }
+
+    for (const toggle of this.qualityToggles) {
+      const toggleElement = toggle as HTMLInputElement;
+      const settingName = toggle.dataset.qualityToggle;
+      if (!settingName || manualSettings[settingName] === undefined) {
+        continue;
+      }
+
+      toggleElement.checked = Boolean(manualSettings[settingName]);
+    }
+
+    for (const valueElement of document.querySelectorAll('[data-quality-value]')) {
+      const typedValueElement = valueElement as HTMLElement;
+      const settingName = typedValueElement.dataset.qualityValue;
+      if (!settingName || manualSettings[settingName] === undefined) {
+        continue;
+      }
+
+      typedValueElement.textContent = `${manualSettings[settingName]}%`;
+    }
+
+    const summary = this.getQualitySummary();
+    for (const summaryElement of this.qualitySummaries) {
+      summaryElement.textContent = summary;
+    }
+  }
+
+  getQualitySummary() {
+    const renderer = this.platformQuality.renderer;
+    const reason = this.platformQuality.reasons[0] ?? 'Balanced browser defaults';
+
+    if (this.qualityMode === 'auto') {
+      return `Auto chose ${this.qualityProfile.label}: ${reason}`;
+    }
+
+    if (this.qualityMode === 'custom') {
+      return `Custom settings from ${renderer}`;
+    }
+
+    return `${this.qualityProfile.label} preset. Auto would choose ${QUALITY_PRESETS[this.platformQuality.recommendedQuality].label}.`;
+  }
+
+  readManualQualitySettingsFromControls() {
+    const currentSettings = customSettingsFromProfile(this.qualityProfile);
+    const settings = { ...currentSettings };
+
+    for (const slider of this.qualitySliders) {
+      const sliderElement = slider as HTMLInputElement;
+      const settingName = slider.dataset.qualitySlider;
+      if (!settingName || settings[settingName] === undefined) {
+        continue;
+      }
+
+      settings[settingName] = Number(sliderElement.value);
+    }
+
+    for (const toggle of this.qualityToggles) {
+      const toggleElement = toggle as HTMLInputElement;
+      const settingName = toggle.dataset.qualityToggle;
+      if (!settingName || settings[settingName] === undefined) {
+        continue;
+      }
+
+      settings[settingName] = Boolean(toggleElement.checked);
+    }
+
+    return sanitizeCustomQualitySettings(settings);
+  }
+
+  applyManualQualityControls(changedControl = null) {
+    if (changedControl?.dataset?.qualitySlider) {
+      const settingName = changedControl.dataset.qualitySlider;
+      for (const slider of this.qualitySliders) {
+        if (slider !== changedControl && slider.dataset.qualitySlider === settingName) {
+          (slider as HTMLInputElement).value = (changedControl as HTMLInputElement).value;
+        }
+      }
+    }
+
+    if (changedControl?.dataset?.qualityToggle) {
+      const settingName = changedControl.dataset.qualityToggle;
+      for (const toggle of this.qualityToggles) {
+        if (toggle !== changedControl && toggle.dataset.qualityToggle === settingName) {
+          (toggle as HTMLInputElement).checked = (changedControl as HTMLInputElement).checked;
+        }
+      }
+    }
+
+    this.setCustomQualitySettings(this.readManualQualitySettingsFromControls());
   }
 
   syncGameShell() {
@@ -967,10 +1189,16 @@ export class Game {
       textures: this.renderer.info.memory.textures,
       pixelRatio: this.renderer.getPixelRatio(),
       quality: this.qualityKey,
+      qualityMode: this.qualityMode,
       qualityLabel: this.qualityProfile.label,
       qualityPixelRatioCap: this.qualityProfile.pixelRatioCap,
       qualityDebrisScale: this.qualityProfile.debrisScale,
       qualityTownDetailScale: this.qualityProfile.townDetailScale,
+      qualityStormFxScale: this.qualityProfile.stormPostScale ?? 0,
+      qualityAutoRecommendation: this.platformQuality.recommendedQuality,
+      qualityPlatformTier: this.platformQuality.tier,
+      qualityPlatformRenderer: this.platformQuality.renderer,
+      qualityPlatformReason: this.platformQuality.reasons[0] ?? '',
       shadowsEnabled: this.renderer.shadowMap.enabled,
       cameraZoomScale: Number((this.cameraOffset.z / BASE_CAMERA_OFFSET.z).toFixed(3)),
       cameraFov: Number(this.camera.fov.toFixed(2)),
@@ -1067,10 +1295,16 @@ export class Game {
       textures: String(diagnostics.textures),
       pixelRatio: String(diagnostics.pixelRatio),
       quality: diagnostics.quality,
+      qualityMode: diagnostics.qualityMode,
       qualityLabel: diagnostics.qualityLabel,
       qualityPixelRatioCap: String(diagnostics.qualityPixelRatioCap),
       qualityDebrisScale: String(diagnostics.qualityDebrisScale),
       qualityTownDetailScale: String(diagnostics.qualityTownDetailScale),
+      qualityStormFxScale: String(diagnostics.qualityStormFxScale),
+      qualityAutoRecommendation: diagnostics.qualityAutoRecommendation,
+      qualityPlatformTier: diagnostics.qualityPlatformTier,
+      qualityPlatformRenderer: diagnostics.qualityPlatformRenderer,
+      qualityPlatformReason: diagnostics.qualityPlatformReason,
       shadowsEnabled: String(diagnostics.shadowsEnabled),
       cameraZoomScale: String(diagnostics.cameraZoomScale),
       cameraFov: String(diagnostics.cameraFov),
@@ -1187,7 +1421,8 @@ export class Game {
         ['Meshes / Groups', `${formatDebugNumber(diagnostics.sceneMeshes)} / ${formatDebugNumber(diagnostics.sceneGroups)}`],
         ['Geometries / Textures', `${formatDebugNumber(diagnostics.geometries)} / ${formatDebugNumber(diagnostics.textures)}`],
         ['Pixel Ratio', formatDebugNumber(diagnostics.pixelRatio, 2)],
-        ['Quality', `${diagnostics.qualityLabel} (${formatDebugNumber(diagnostics.qualityPixelRatioCap, 2)}x cap)`],
+        ['Quality', `${diagnostics.qualityMode === 'auto' ? 'Auto -> ' : ''}${diagnostics.qualityLabel} (${formatDebugNumber(diagnostics.qualityPixelRatioCap, 2)}x cap)`],
+        ['Platform', `${diagnostics.qualityPlatformTier} / ${diagnostics.qualityAutoRecommendation}`],
         ['Shadows / Bloom', `${diagnostics.shadowsEnabled ? 'on' : 'off'} / ${diagnostics.bloomEnabled ? 'on' : 'off'}`],
       ])}
       ${this.renderDebugSection('Town', [

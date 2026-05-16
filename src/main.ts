@@ -48,7 +48,19 @@ document.querySelector('#perspective-slider').addEventListener('input', (event) 
 
 document.querySelectorAll('[data-quality-option]').forEach((button) => {
   button.addEventListener('click', () => {
-    game.setQuality((button as HTMLElement).dataset.qualityOption);
+    game.setQualityMode((button as HTMLElement).dataset.qualityOption);
+  });
+});
+
+document.querySelectorAll('[data-quality-slider]').forEach((slider) => {
+  slider.addEventListener('input', (event) => {
+    game.applyManualQualityControls(event.target as HTMLElement);
+  });
+});
+
+document.querySelectorAll('[data-quality-toggle]').forEach((toggle) => {
+  toggle.addEventListener('change', (event) => {
+    game.applyManualQualityControls(event.target as HTMLElement);
   });
 });
 

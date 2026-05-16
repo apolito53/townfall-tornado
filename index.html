@@ -31,9 +31,37 @@
           <div class="quality-control" aria-label="Graphics quality">
             <span>Quality</span>
             <div class="quality-options" role="group" aria-label="Graphics quality">
+              <button class="quality-button" type="button" data-quality-option="auto">Auto</button>
               <button class="quality-button" type="button" data-quality-option="low">Low</button>
               <button class="quality-button" type="button" data-quality-option="medium">Medium</button>
               <button class="quality-button" type="button" data-quality-option="high">High</button>
+            </div>
+            <small class="quality-summary" data-quality-summary>Detecting browser renderer...</small>
+            <div class="quality-manual" aria-label="Manual quality tuning">
+              <label class="quality-slider" for="start-render-scale">
+                <span>Render</span>
+                <input id="start-render-scale" type="range" min="50" max="135" step="5" data-quality-slider="renderScale" />
+                <strong data-quality-value="renderScale">100%</strong>
+              </label>
+              <label class="quality-slider" for="start-effects-scale">
+                <span>Effects</span>
+                <input id="start-effects-scale" type="range" min="25" max="100" step="5" data-quality-slider="effectsScale" />
+                <strong data-quality-value="effectsScale">100%</strong>
+              </label>
+              <label class="quality-slider" for="start-town-scale">
+                <span>Detail</span>
+                <input id="start-town-scale" type="range" min="45" max="115" step="5" data-quality-slider="townDetailScale" />
+                <strong data-quality-value="townDetailScale">100%</strong>
+              </label>
+              <label class="quality-slider" for="start-storm-fx">
+                <span>Storm FX</span>
+                <input id="start-storm-fx" type="range" min="0" max="100" step="5" data-quality-slider="stormFxScale" />
+                <strong data-quality-value="stormFxScale">100%</strong>
+              </label>
+              <div class="quality-toggles">
+                <label><input type="checkbox" data-quality-toggle="shadows" /> Shadows</label>
+                <label><input type="checkbox" data-quality-toggle="bloom" /> Bloom</label>
+              </div>
             </div>
           </div>
         </div>
@@ -102,9 +130,37 @@
           <div class="setting-row quality-control" aria-label="Graphics quality">
             <span>Quality</span>
             <div class="quality-options" role="group" aria-label="Graphics quality">
+              <button class="quality-button" type="button" data-quality-option="auto">Auto</button>
               <button class="quality-button" type="button" data-quality-option="low">Low</button>
               <button class="quality-button" type="button" data-quality-option="medium">Medium</button>
               <button class="quality-button" type="button" data-quality-option="high">High</button>
+            </div>
+            <small class="quality-summary" data-quality-summary>Detecting browser renderer...</small>
+            <div class="quality-manual" aria-label="Manual quality tuning">
+              <label class="quality-slider" for="pause-render-scale">
+                <span>Render</span>
+                <input id="pause-render-scale" type="range" min="50" max="135" step="5" data-quality-slider="renderScale" />
+                <strong data-quality-value="renderScale">100%</strong>
+              </label>
+              <label class="quality-slider" for="pause-effects-scale">
+                <span>Effects</span>
+                <input id="pause-effects-scale" type="range" min="25" max="100" step="5" data-quality-slider="effectsScale" />
+                <strong data-quality-value="effectsScale">100%</strong>
+              </label>
+              <label class="quality-slider" for="pause-town-scale">
+                <span>Detail</span>
+                <input id="pause-town-scale" type="range" min="45" max="115" step="5" data-quality-slider="townDetailScale" />
+                <strong data-quality-value="townDetailScale">100%</strong>
+              </label>
+              <label class="quality-slider" for="pause-storm-fx">
+                <span>Storm FX</span>
+                <input id="pause-storm-fx" type="range" min="0" max="100" step="5" data-quality-slider="stormFxScale" />
+                <strong data-quality-value="stormFxScale">100%</strong>
+              </label>
+              <div class="quality-toggles">
+                <label><input type="checkbox" data-quality-toggle="shadows" /> Shadows</label>
+                <label><input type="checkbox" data-quality-toggle="bloom" /> Bloom</label>
+              </div>
             </div>
           </div>
 

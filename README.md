@@ -36,7 +36,7 @@ This Vite project has a dedicated strict port assignment so it can run beside th
 - `WASD` or arrow keys move the tornado.
 - Pointer/touch drag steers from the screen center.
 - `Pause` opens the storm control menu.
-- The start and pause menus include `Low`, `Medium`, and `High` quality presets. Low mode reduces pixel ratio, disables shadows/post-processing bloom, reduces debris density, and tightens town detail distance for weaker machines.
+- The start and pause menus include `Auto`, `Low`, `Medium`, and `High` quality presets plus manual sliders for render scale, effects density, town detail distance, and storm FX. `Auto` uses browser/WebGL hints to avoid punishing machines that are running through software rendering or weak integrated/mobile GPUs.
 - The pause menu contains `Resume`, `Restart`, and a perspective slider for low-to-high camera angle.
 - `F3` toggles the debug overlay with FPS, frame hitches, object counts, town budgets, and render counters.
 

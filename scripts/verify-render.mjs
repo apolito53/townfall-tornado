@@ -81,6 +81,11 @@ try {
       }
     });
     page.on('pageerror', (error) => consoleErrors.push(error.message));
+    await page.addInitScript(() => {
+      localStorage.setItem('townfall.qualityMode', 'high');
+      localStorage.removeItem('townfall.quality');
+      localStorage.removeItem('townfall.qualityCustom');
+    });
 
     await page.goto(url, { waitUntil: 'networkidle' });
     await page.waitForFunction(() => window.__townfallDiagnostics?.renderOk === true, undefined, {
@@ -235,7 +240,13 @@ try {
       errors.push(`${viewport.name}: renderer pixel ratio was not capped (${upgradedDiagnostics.pixelRatio})`);
     }
 
-    if (upgradedDiagnostics.quality !== 'high' || upgradedDiagnostics.qualityDebrisScale !== 1) {
+    if (
+      upgradedDiagnostics.qualityMode !== 'high'
+      || upgradedDiagnostics.quality !== 'high'
+      || upgradedDiagnostics.qualityDebrisScale !== 1
+      || !['low', 'medium', 'high'].includes(upgradedDiagnostics.qualityAutoRecommendation)
+      || typeof upgradedDiagnostics.qualityPlatformRenderer !== 'string'
+    ) {
       errors.push(`${viewport.name}: default quality diagnostics were not high (${JSON.stringify(upgradedDiagnostics)})`);
     }
 
@@ -405,7 +416,8 @@ try {
 
     await page.locator('.pause-menu [data-quality-option="low"]').click();
     await page.waitForFunction(
-      () => document.querySelector('#diagnostics')?.dataset.quality === 'low',
+      () => document.querySelector('#diagnostics')?.dataset.qualityMode === 'low'
+        && document.querySelector('#diagnostics')?.dataset.quality === 'low',
       undefined,
       { timeout: 3000 },
     );
@@ -423,9 +435,26 @@ try {
       errors.push(`${viewport.name}: low quality mode did not reduce renderer/effect settings (${JSON.stringify(lowQualityDiagnostics)})`);
     }
 
+    await page.locator('.pause-menu [data-quality-slider="renderScale"]').fill('60');
+    await page.waitForFunction(
+      () => document.querySelector('#diagnostics')?.dataset.qualityMode === 'custom',
+      undefined,
+      { timeout: 3000 },
+    );
+    const customQualityDiagnostics = await page.evaluate(() => window.__townfallDiagnostics);
+    if (
+      customQualityDiagnostics.quality !== 'custom'
+      || customQualityDiagnostics.pixelRatio > 0.61
+      || customQualityDiagnostics.qualityPixelRatioCap !== 0.6
+      || customQualityDiagnostics.qualityDebrisScale >= 1
+    ) {
+      errors.push(`${viewport.name}: manual quality slider did not switch to custom reduced settings (${JSON.stringify(customQualityDiagnostics)})`);
+    }
+
     await page.locator('.pause-menu [data-quality-option="high"]').click();
     await page.waitForFunction(
-      () => document.querySelector('#diagnostics')?.dataset.quality === 'high',
+      () => document.querySelector('#diagnostics')?.dataset.qualityMode === 'high'
+        && document.querySelector('#diagnostics')?.dataset.quality === 'high',
       undefined,
       { timeout: 3000 },
     );
