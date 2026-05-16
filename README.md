@@ -1,6 +1,6 @@
 # Townfall Tornado
 
-A tiny 3D arcade destruction prototype where you steer a tornado through a town, absorb lighter objects, grow into higher categories, and work your way up to larger buildings. The current pass uses staged structural damage, visible ground scarring, pooled GPU debris particles, instanced larger chunks, a sky-connected funnel descending from a wall cloud, procedural town chunks that appear near the map edge, and dramatic category-based scale changes for both tornado diameter and camera distance.
+A tiny 3D arcade destruction prototype where you steer a tornado through a town, absorb lighter objects, grow into higher categories, and work your way up to larger buildings. The current pass uses staged structural damage, visible ground scarring, pooled GPU debris particles, instanced larger chunks, instanced far-town proxies, a sky-connected funnel descending from a wall cloud, procedural town chunks that appear near the map edge, and dramatic category-based scale changes for both tornado diameter and camera distance.
 
 ## Run
 

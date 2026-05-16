@@ -187,6 +187,14 @@ try {
       errors.push(`${viewport.name}: town item diagnostics did not report generated destructibles`);
     }
 
+    if (
+      upgradedDiagnostics.instancedTownProxies <= 0
+      || upgradedDiagnostics.instancedTownInstances <= upgradedDiagnostics.instancedTownProxies
+      || upgradedDiagnostics.instancedTownInstances > upgradedDiagnostics.instancedTownCapacity
+    ) {
+      errors.push(`${viewport.name}: instanced town proxy diagnostics were not active (${JSON.stringify(upgradedDiagnostics)})`);
+    }
+
     if (upgradedDiagnostics.simulatedItems <= 0 || upgradedDiagnostics.simulatedItems >= upgradedDiagnostics.totalItems) {
       errors.push(`${viewport.name}: spatial simulation culling was not active (${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems})`);
     }
@@ -219,6 +227,10 @@ try {
       errors.push(`${viewport.name}: render LOD budget was not active (${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts})`);
     }
 
+    if (upgradedDiagnostics.detailedTownItems <= 0 || upgradedDiagnostics.detailedTownItems >= upgradedDiagnostics.totalItems) {
+      errors.push(`${viewport.name}: full town model promotion was not bounded (${upgradedDiagnostics.detailedTownItems}/${upgradedDiagnostics.totalItems})`);
+    }
+
     if (upgradedDiagnostics.pixelRatio > 1.35) {
       errors.push(`${viewport.name}: renderer pixel ratio was not capped (${upgradedDiagnostics.pixelRatio})`);
     }
@@ -245,6 +257,7 @@ try {
     if (
       !debugOverlay.text.includes('Performance')
       || !debugOverlay.text.includes('Particles')
+      || !debugOverlay.text.includes('Proxy Items')
       || typeof debugOverlay.diagnostics.fps !== 'number'
       || typeof debugOverlay.diagnostics.hitchCount !== 'number'
       || debugOverlay.diagnostics.sceneObjects <= 0
@@ -392,7 +405,7 @@ try {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);
     }
 
-    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, chunks ${upgradedDiagnostics.generatedChunks}, simulated ${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems}, effects ${upgradedDiagnostics.effectPieces}, particles ${stressDiagnostics.activeParticles}/${stressDiagnostics.particleCapacity}, instanced chunks ${stressDiagnostics.activeInstancedChunks}/${stressDiagnostics.instancedDebrisCapacity}, visible parts ${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts}, draw calls ${upgradedDiagnostics.drawCalls}, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
+    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, chunks ${upgradedDiagnostics.generatedChunks}, simulated ${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems}, detailed town ${upgradedDiagnostics.detailedTownItems}, proxies ${upgradedDiagnostics.visibleInstancedTownProxies}/${upgradedDiagnostics.instancedTownProxies}, effects ${upgradedDiagnostics.effectPieces}, particles ${stressDiagnostics.activeParticles}/${stressDiagnostics.particleCapacity}, instanced chunks ${stressDiagnostics.activeInstancedChunks}/${stressDiagnostics.instancedDebrisCapacity}, visible parts ${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts}, draw calls ${upgradedDiagnostics.drawCalls}, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
     await page.close();
   }
 } finally {

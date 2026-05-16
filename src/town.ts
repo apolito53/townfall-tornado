@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TownInstancing } from './townInstancing';
 
 const BUILDABLE_COORDS = [-34, -22, -10, 10, 22, 34];
 const ROAD_COORDS = [-4, 4];
@@ -122,6 +123,7 @@ function createRenderBudgetStats() {
     totalItems: 0,
     visibleParts: 0,
     totalParts: 0,
+    detailedItems: 0,
   };
 }
 
@@ -239,6 +241,7 @@ function createHouse(variant = 0) {
   return {
     group,
     type: 'House',
+    variant,
     massRequired: 54,
     points: 520,
     growth: 14,
@@ -275,6 +278,7 @@ function createShop(variant = 0) {
   return {
     group,
     type: 'Shop',
+    variant,
     massRequired: 82,
     points: 860,
     growth: 23,
@@ -334,6 +338,7 @@ function createFence(length = 4.8) {
   return {
     group,
     type: 'Fence',
+    variant: Math.round(length * 10),
     massRequired: 4,
     points: 35,
     growth: 1,
@@ -358,6 +363,7 @@ function createCar(variant = 0) {
   return {
     group,
     type: 'Car',
+    variant,
     massRequired: 22,
     points: 210,
     growth: 6,
@@ -425,6 +431,10 @@ class Destructible {
     this.damageStage = 0;
     this.pressureBurstTimer = 0;
     this.generatedPieces = [];
+    this.renderParent = null;
+    this.proxyRenderer = null;
+    this.renderProxy = null;
+    this.isDetailedActive = false;
     this.lastPullDirection = new THREE.Vector3(1, 0, 0);
     this.velocity = new THREE.Vector3();
     this.spin = new THREE.Vector3(
@@ -440,6 +450,37 @@ class Destructible {
     this.baseY = position.y;
     this.baseScale = this.group.scale.clone();
     this.parts = this.collectParts();
+  }
+
+  setRenderProxy(renderParent, proxyRenderer, renderProxy) {
+    this.renderParent = renderParent;
+    this.proxyRenderer = proxyRenderer;
+    this.renderProxy = renderProxy;
+  }
+
+  setDetailedActive(isDetailed) {
+    if (!this.renderParent) {
+      return;
+    }
+
+    this.isDetailedActive = isDetailed;
+    if (isDetailed) {
+      if (this.group.parent !== this.renderParent) {
+        this.renderParent.add(this.group);
+      }
+      this.group.visible = !this.destroyed;
+      this.setProxyVisible(false);
+      return;
+    }
+
+    if (this.group.parent === this.renderParent) {
+      this.renderParent.remove(this.group);
+    }
+    this.group.visible = false;
+  }
+
+  setProxyVisible(isVisible) {
+    this.proxyRenderer?.setProxyVisible(this.renderProxy, Boolean(isVisible && !this.destroyed));
   }
 
   collectParts() {
@@ -492,6 +533,13 @@ class Destructible {
       part.mesh.position.copy(part.originalPosition);
       part.mesh.rotation.copy(part.originalRotation);
       part.mesh.scale.copy(part.originalScale);
+    }
+
+    if (this.renderProxy) {
+      this.setDetailedActive(false);
+      this.setProxyVisible(true);
+    } else {
+      this.setDetailedActive(true);
     }
   }
 
@@ -801,12 +849,16 @@ class Destructible {
 
     this.damage = 1;
     this.damageStage = DAMAGE_STAGE_THRESHOLDS.length;
+    this.setProxyVisible(false);
+    this.setDetailedActive(false);
   }
 
   swallowIntoStorm() {
     this.destroyed = true;
     this.model.visible = false;
     this.removeGeneratedPieces();
+    this.setProxyVisible(false);
+    this.setDetailedActive(false);
   }
 
   applyDamagePose(inward, pullRatio, dt) {
@@ -875,13 +927,15 @@ class Destructible {
     const isMinorProp = !this.isStructural;
     const showWholeItem = !isMinorProp || active || distanceSq <= minorPropRadius * minorPropRadius;
     const showFineDetail = active || distanceSq <= detailRadius * detailRadius;
+    const useDetailedModel = Boolean(showWholeItem && (!this.renderProxy || active || showFineDetail));
 
-    this.group.visible = showWholeItem;
+    this.setDetailedActive(useDetailedModel);
+    this.setProxyVisible(showWholeItem && !useDetailedModel);
 
-    if (!this.model.visible) {
+    if (!this.model.visible || !useDetailedModel) {
       return {
-        visibleItems: this.group.visible ? 1 : 0,
-        visibleParts: 0,
+        visibleItems: showWholeItem && !this.destroyed ? 1 : 0,
+        visibleParts: this.renderProxy && showWholeItem && !this.destroyed ? Math.min(2, this.parts.length) : 0,
         totalParts: this.parts.length,
       };
     }
@@ -917,6 +971,7 @@ export class Town {
     this.group = new THREE.Group();
     this.levelIndex = 0;
     this.scene.add(this.group);
+    this.instancedTown = null;
     this.resetForLevel(0);
   }
 
@@ -926,7 +981,9 @@ export class Town {
 
   resetForLevel(levelIndex = this.levelIndex) {
     this.levelIndex = levelIndex;
+    this.instancedTown?.dispose();
     this.group.clear();
+    this.instancedTown = new TownInstancing(this.group);
     this.groundDamageGroup = new THREE.Group();
     this.items = [];
     this.itemBuckets = new Map();
@@ -934,6 +991,7 @@ export class Town {
     this.simulationCursor = 0;
     this.lastUpdateStats = createSimulationStats();
     this.lastRenderBudgetStats = createRenderBudgetStats();
+    this.lastInstancingStats = this.instancedTown.getDiagnostics();
     this.groundScars = [];
     this.groundScarTimer = 0;
     this.generatedChunks = new Set([chunkKey(0, 0)]);
@@ -955,7 +1013,9 @@ export class Town {
     this.simulationCursor = 0;
     this.lastUpdateStats = createSimulationStats();
     this.lastRenderBudgetStats = createRenderBudgetStats();
+    this.lastInstancingStats = this.instancedTown.getDiagnostics();
     this.clearGroundDamage();
+    this.updateRenderBudget(new THREE.Vector3(), 1);
   }
 
   update(stormProfile, stormPosition, dt) {
@@ -970,6 +1030,8 @@ export class Town {
     this.activeItems.clear();
 
     for (const item of itemsToUpdate) {
+      item.setDetailedActive(true);
+      item.setProxyVisible(false);
       const absorbed = item.update(stormProfile, stormPosition, dt, effectBudget);
       if (absorbed) {
         absorbedItems.push(absorbed);
@@ -994,6 +1056,7 @@ export class Town {
       effectPieces: effectBudget.createdPieces,
       skippedEffectPieces: effectBudget.skippedPieces,
     };
+    this.lastInstancingStats = this.instancedTown.getDiagnostics();
 
     return absorbedItems;
   }
@@ -1102,9 +1165,13 @@ export class Town {
       stats.visibleItems += itemStats.visibleItems;
       stats.visibleParts += itemStats.visibleParts;
       stats.totalParts += itemStats.totalParts;
+      if (item.isDetailedActive) {
+        stats.detailedItems += 1;
+      }
     }
 
     this.lastRenderBudgetStats = stats;
+    this.lastInstancingStats = this.instancedTown.getDiagnostics();
   }
 
   createTerrain() {
@@ -1128,10 +1195,10 @@ export class Town {
     }
 
     for (let index = -56; index <= 56; index += 12) {
-      this.group.add(box(2.6, 0.1, 0.18, MATERIALS.roadStripe, index, 0.06, -4));
-      this.group.add(box(2.6, 0.1, 0.18, MATERIALS.roadStripe, index, 0.06, 4));
-      this.group.add(box(0.18, 0.1, 2.6, MATERIALS.roadStripe, -4, 0.06, index));
-      this.group.add(box(0.18, 0.1, 2.6, MATERIALS.roadStripe, 4, 0.06, index));
+      this.instancedTown.addRoadStripe(new THREE.Vector3(index, 0.11, -4), new THREE.Vector3(2.6, 0.1, 0.18));
+      this.instancedTown.addRoadStripe(new THREE.Vector3(index, 0.11, 4), new THREE.Vector3(2.6, 0.1, 0.18));
+      this.instancedTown.addRoadStripe(new THREE.Vector3(-4, 0.11, index), new THREE.Vector3(0.18, 0.1, 2.6));
+      this.instancedTown.addRoadStripe(new THREE.Vector3(4, 0.11, index), new THREE.Vector3(0.18, 0.1, 2.6));
     }
 
     for (const coord of [-9, 9]) {
@@ -1166,8 +1233,8 @@ export class Town {
     }
 
     for (let index = -CHUNK_SIZE * 0.42; index <= CHUNK_SIZE * 0.42; index += 12) {
-      this.group.add(box(2.5, 0.1, 0.16, MATERIALS.roadStripe, originX + index, 0.06, originZ));
-      this.group.add(box(0.16, 0.1, 2.5, MATERIALS.roadStripe, originX, 0.06, originZ + index));
+      this.instancedTown.addRoadStripe(new THREE.Vector3(originX + index, 0.11, originZ), new THREE.Vector3(2.5, 0.1, 0.16));
+      this.instancedTown.addRoadStripe(new THREE.Vector3(originX, 0.11, originZ + index), new THREE.Vector3(0.16, 0.1, 2.5));
     }
   }
 
@@ -1348,9 +1415,12 @@ export class Town {
 
   addItem(config, position, rotation = 0) {
     const item = new Destructible(config, position, rotation, this.debrisEffects);
+    const renderProxy = this.instancedTown.addItemProxy(config, position, rotation);
+    item.setRenderProxy(this.group, this.instancedTown, renderProxy);
     this.items.push(item);
     this.registerItem(item);
-    this.group.add(item.group);
+    item.setDetailedActive(!renderProxy);
+    item.setProxyVisible(Boolean(renderProxy));
   }
 
   registerItem(item) {

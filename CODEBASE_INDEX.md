@@ -14,8 +14,9 @@
 - `src/categoryProgression.ts` owns the very steep log-spaced tornado category mass requirements shared by gameplay and the HUD growth meter.
 - `src/debrisParticles.ts` owns the pooled GPU debris layer: shader-driven dust/fleck particles plus strict-capacity instanced chunk debris.
 - `src/stormAtmosphereShader.ts` owns the full-screen storm grading shader for humid haze, dark cloud shadowing, rain streaks, grain, vignette, and lightning wash.
+- `src/townInstancing.ts` owns the instanced far-town proxy renderer for simple house/shop LODs, trees, fences, cars, and road stripes.
 - `src/tornado.ts` owns tornado growth stats, category thresholds, dramatic diameter scaling, taller wiggly sky-connected funnel visuals, procedural smoky funnel/storm-sky textures, wall cloud curtains, dust, and airborne debris.
-- `src/town.ts` owns terrain, roads, a large low-cost base ground plane, more detailed low-poly building models, destructible town props, staged structural damage, pressure bursts, rotating per-frame simulation budgets, frame-budgeted debris particle/chunk emissions, persistent capped ground scars, continuous 5x5 procedural town chunk loading around the tornado, spatial buckets for nearby destructible simulation, distance-based render LOD, lift thresholds, suction response, and destroyed ratio.
+- `src/town.ts` owns terrain, roads, a large low-cost base ground plane, more detailed low-poly building models, destructible town props, staged structural damage, pressure bursts, rotating per-frame simulation budgets, frame-budgeted debris particle/chunk emissions, persistent capped ground scars, continuous 5x5 procedural town chunk loading around the tornado, spatial buckets for nearby destructible simulation, full-model promotion near storm interaction, distance-based render LOD, lift thresholds, suction response, and destroyed ratio.
 - `src/input.ts` translates keyboard and pointer/touch steering into a normalized movement vector.
 - `src/ui.ts` updates the level tracker, HUD, growth bar, timer, and short storm messages.
 - `src/globals.d.ts` declares local browser diagnostics hooks used by the smoke tests.
@@ -25,6 +26,7 @@
 
 - Adjust tornado progression in `src/categoryProgression.ts`; adjust tornado feel in `src/tornado.ts`: diameter `radius`, `pullRadius`, `liftLimit`, `speed`, `pullStrength`, smoky funnel texture, and stacked funnel-section wobble.
 - Add or tune destructible object types and building detail in `src/town.ts`: creation helpers plus `massRequired`, `points`, `growth`, `radius`, staged damage roles, level density, loaded chunk radius, world base ground size, spatial simulation cell size, render LOD radii, and procedural chunk placement.
+- Tune far-town proxy capacities, simple LOD shapes, and instanced road stripe behavior in `src/townInstancing.ts`.
 - Change levels, category-scaled score/damage targets, queued absorption pacing, timer, combo, pause behavior, camera angle/zoom/fog composition, post-processing setup, scene debris caps, minimum level duration, or diagnostics in `src/game.ts`.
 - Tune visual debris capacity, shader motion, particle colors, and instanced chunk behavior in `src/debrisParticles.ts`.
 - Tune screen-space storm realism in `src/stormAtmosphereShader.ts`: color grade, haze, rain streaks, vignette, grain, and lightning response.
@@ -50,4 +52,4 @@ $env:TOWNFALL_URL='http://127.0.0.1:5175/'; npm.cmd run verify:render
 - The game renders through `EffectComposer`; resize, manually reset renderer info, on-change shadow refreshes, and shader diagnostics are wired from `src/game.ts`.
 - This first prototype uses simple custom suction and structural-stress physics rather than a full rigid-body engine.
 - Tiny debris particles are visual only and intentionally have no collision; they are GPU-shader points and pooled instanced chunks so long Cat 4/Cat 5 runs do not create thousands of short-lived scene objects.
-- Procedural town chunks are generated around the tornado's current chunk and stay loaded; town object updates, huge-radius candidate simulation, debris particle/chunk emissions, and distant details/props are budgeted/capped, but full chunk unloading and deeper town/building instancing are still the next big levers if long runs get dense.
+- Procedural town chunks are generated around the tornado's current chunk and stay loaded; distant houses/shops/trees/fences/cars/road stripes render through instanced proxies, while full destructible models are promoted inside the interaction/detail bubble. Full chunk unloading is still the next big lever if long runs get dense.

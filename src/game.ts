@@ -762,6 +762,7 @@ export class Game {
 
     const townStats = this.town.lastUpdateStats;
     const renderBudgetStats = this.town.lastRenderBudgetStats;
+    const townInstancingStats = this.town.lastInstancingStats ?? this.town.instancedTown?.getDiagnostics?.() ?? {};
     const levelTargets = this.getLevelTargets();
     const sceneStats = this.debugOverlayVisible ? this.collectSceneStats() : this.lastSceneStats;
     const profile = this.currentStormProfile ?? this.tornado.getProfile();
@@ -814,6 +815,13 @@ export class Game {
       visibleItems: renderBudgetStats.visibleItems,
       visibleParts: renderBudgetStats.visibleParts,
       totalParts: renderBudgetStats.totalParts,
+      detailedTownItems: renderBudgetStats.detailedItems ?? 0,
+      instancedTownProxies: townInstancingStats.proxyCount ?? 0,
+      visibleInstancedTownProxies: townInstancingStats.visibleProxyCount ?? 0,
+      instancedTownInstances: townInstancingStats.usedInstances ?? 0,
+      visibleInstancedTownInstances: townInstancingStats.visibleInstances ?? 0,
+      instancedTownCapacity: townInstancingStats.capacity ?? 0,
+      skippedInstancedTownInstances: townInstancingStats.skippedInstances ?? 0,
       groundScars: this.town.groundScars.length,
       drawCalls: renderInfo.calls,
       triangles: renderInfo.triangles,
@@ -895,6 +903,13 @@ export class Game {
       visibleItems: String(diagnostics.visibleItems),
       visibleParts: String(diagnostics.visibleParts),
       totalParts: String(diagnostics.totalParts),
+      detailedTownItems: String(diagnostics.detailedTownItems),
+      instancedTownProxies: String(diagnostics.instancedTownProxies),
+      visibleInstancedTownProxies: String(diagnostics.visibleInstancedTownProxies),
+      instancedTownInstances: String(diagnostics.instancedTownInstances),
+      visibleInstancedTownInstances: String(diagnostics.visibleInstancedTownInstances),
+      instancedTownCapacity: String(diagnostics.instancedTownCapacity),
+      skippedInstancedTownInstances: String(diagnostics.skippedInstancedTownInstances),
       groundScars: String(diagnostics.groundScars),
       drawCalls: String(diagnostics.drawCalls),
       triangles: String(diagnostics.triangles),
@@ -994,7 +1009,9 @@ export class Game {
       ${this.renderDebugSection('Town', [
         ['Chunks', formatDebugNumber(diagnostics.generatedChunks)],
         ['Items', formatDebugNumber(diagnostics.totalItems)],
-        ['Visible Items', formatDebugNumber(diagnostics.visibleItems)],
+        ['Detailed / Visible', `${formatDebugNumber(diagnostics.detailedTownItems)} / ${formatDebugNumber(diagnostics.visibleItems)}`],
+        ['Proxy Items', `${formatDebugNumber(diagnostics.visibleInstancedTownProxies)} / ${formatDebugNumber(diagnostics.instancedTownProxies)}`],
+        ['Proxy Instances', `${formatDebugNumber(diagnostics.visibleInstancedTownInstances)} / ${formatDebugNumber(diagnostics.instancedTownInstances)}`],
         ['Simulated / Candidates', `${formatDebugNumber(diagnostics.simulatedItems)} / ${formatDebugNumber(diagnostics.candidateItems)}`],
         ['Active / Throttled', `${formatDebugNumber(diagnostics.activeItems)} / ${formatDebugNumber(diagnostics.throttledCandidates)}`],
       ])}
