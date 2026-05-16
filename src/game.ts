@@ -16,6 +16,8 @@ const SHADOW_MAP_SIZE = 1024;
 const MAX_SCENE_DEBRIS = 96;
 const MAX_DEBRIS_PER_FRAME = 16;
 const MAX_ABSORPTIONS_PER_FRAME = 8;
+const DIAGNOSTICS_UPDATE_INTERVAL_MS = 450;
+const HITCH_FRAME_THRESHOLD_MS = 75;
 const MIN_LEVEL_DURATION_BY_INDEX = [10, 14, 18, 22, 26];
 const LEVEL_TARGET_MULTIPLIER_BY_CATEGORY = [1, 2.4, 5.5, 12, 25];
 const LEVEL_DAMAGE_BONUS_BY_CATEGORY = [0, 0.04, 0.1, 0.17, 0.24];
@@ -77,6 +79,49 @@ function getCategoryIndex(category) {
   return Math.min(LEVEL_TARGET_MULTIPLIER_BY_CATEGORY.length - 1, Math.max(0, category - 1));
 }
 
+function createPerformanceStats() {
+  return {
+    lastFrameStartedAt: 0,
+    sampleStartedAt: performance.now(),
+    sampleFrames: 0,
+    sampleFrameMs: 0,
+    sampleWorkMs: 0,
+    sampleMaxFrameMs: 0,
+    sampleMaxWorkMs: 0,
+    fps: 0,
+    averageFrameMs: 0,
+    averageWorkMs: 0,
+    lastFrameMs: 0,
+    lastWorkMs: 0,
+    maxFrameMs: 0,
+    maxWorkMs: 0,
+    hitchCount: 0,
+    lastHitchMs: 0,
+    longestHitchMs: 0,
+  };
+}
+
+function createSceneStats() {
+  return {
+    sceneObjects: 0,
+    meshes: 0,
+    groups: 0,
+    lights: 0,
+    materials: 0,
+  };
+}
+
+function formatDebugNumber(value, digits = 0) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return value.toLocaleString('en-US', {
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+  });
+}
+
 export class Game {
   [key: string]: any;
 
@@ -90,6 +135,10 @@ export class Game {
     this.canvas = canvas;
     this.diagnosticsElement = diagnosticsElement;
     this.pixelDiagnosticsEnabled = new URLSearchParams(window.location.search).has('pixelDiagnostics');
+    this.debugOverlayVisible = new URLSearchParams(window.location.search).has('debug')
+      || window.localStorage.getItem('townfall.debugOverlay') === 'true';
+    this.performanceStats = createPerformanceStats();
+    this.lastSceneStats = createSceneStats();
     this.clock = new THREE.Clock();
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x7f8d8a);
@@ -153,7 +202,16 @@ export class Game {
     this.resize();
     this.queueShadowRefresh();
     this.syncGameShell();
+    this.setDebugOverlayVisible(this.debugOverlayVisible, { persist: false });
     window.addEventListener('resize', () => this.resize());
+    window.addEventListener('keydown', (event) => {
+      if (event.key !== 'F3') {
+        return;
+      }
+
+      event.preventDefault();
+      this.setDebugOverlayVisible(!this.debugOverlayVisible);
+    });
   }
 
   get currentLevel() {
@@ -373,6 +431,11 @@ export class Game {
   }
 
   tick() {
+    const frameStartedAt = performance.now();
+    const realFrameMs = this.performanceStats.lastFrameStartedAt > 0
+      ? frameStartedAt - this.performanceStats.lastFrameStartedAt
+      : 0;
+    this.performanceStats.lastFrameStartedAt = frameStartedAt;
     const dt = Math.min(this.clock.getDelta(), 0.05);
     this.frame += 1;
 
@@ -395,7 +458,64 @@ export class Game {
     this.pendingShadowRefresh = false;
     this.composer.render();
     this.renderer.shadowMap.needsUpdate = false;
+    this.samplePerformance(realFrameMs, performance.now() - frameStartedAt);
     this.collectDiagnostics();
+  }
+
+  setDebugOverlayVisible(isVisible, { persist = true } = {}) {
+    this.debugOverlayVisible = Boolean(isVisible);
+
+    if (persist) {
+      window.localStorage.setItem('townfall.debugOverlay', String(this.debugOverlayVisible));
+    }
+
+    if (!this.diagnosticsElement) {
+      return;
+    }
+
+    this.diagnosticsElement.hidden = !this.debugOverlayVisible;
+    this.diagnosticsElement.setAttribute('aria-hidden', String(!this.debugOverlayVisible));
+    this.diagnosticsElement.classList.toggle('diagnostics--visible', this.debugOverlayVisible);
+  }
+
+  samplePerformance(frameMs, workMs) {
+    const stats = this.performanceStats;
+    stats.lastFrameMs = frameMs;
+    stats.lastWorkMs = workMs;
+
+    if (frameMs > 0) {
+      stats.sampleFrames += 1;
+      stats.sampleFrameMs += frameMs;
+      stats.sampleWorkMs += workMs;
+      stats.sampleMaxFrameMs = Math.max(stats.sampleMaxFrameMs, frameMs);
+      stats.sampleMaxWorkMs = Math.max(stats.sampleMaxWorkMs, workMs);
+      stats.maxFrameMs = Math.max(stats.maxFrameMs, frameMs);
+      stats.maxWorkMs = Math.max(stats.maxWorkMs, workMs);
+    }
+
+    if (frameMs >= HITCH_FRAME_THRESHOLD_MS) {
+      stats.hitchCount += 1;
+      stats.lastHitchMs = frameMs;
+      stats.longestHitchMs = Math.max(stats.longestHitchMs, frameMs);
+    }
+
+    const now = performance.now();
+    const sampleDuration = now - stats.sampleStartedAt;
+    if (sampleDuration < 1000 || stats.sampleFrames === 0) {
+      return;
+    }
+
+    stats.fps = stats.sampleFrames / (sampleDuration / 1000);
+    stats.averageFrameMs = stats.sampleFrameMs / stats.sampleFrames;
+    stats.averageWorkMs = stats.sampleWorkMs / stats.sampleFrames;
+    stats.maxFrameMs = stats.sampleMaxFrameMs;
+    stats.maxWorkMs = stats.sampleMaxWorkMs;
+    stats.sampleStartedAt = now;
+    stats.sampleFrames = 0;
+    stats.sampleFrameMs = 0;
+    stats.sampleWorkMs = 0;
+    stats.sampleMaxFrameMs = 0;
+    stats.sampleMaxWorkMs = 0;
   }
 
   update(dt) {
@@ -656,7 +776,7 @@ export class Game {
 
   collectDiagnostics() {
     const now = performance.now();
-    if (now - this.lastDiagnosticsAt < 450) {
+    if (now - this.lastDiagnosticsAt < DIAGNOSTICS_UPDATE_INTERVAL_MS) {
       return;
     }
 
@@ -694,13 +814,32 @@ export class Game {
     const townStats = this.town.lastUpdateStats;
     const renderBudgetStats = this.town.lastRenderBudgetStats;
     const levelTargets = this.getLevelTargets();
+    const sceneStats = this.debugOverlayVisible ? this.collectSceneStats() : this.lastSceneStats;
+    const profile = this.currentStormProfile ?? this.tornado.getProfile();
+    const performanceStats = this.performanceStats;
     const diagnostics = {
       renderOk: visibleSamples >= 3 && renderInfo.calls > 0,
       sampledPixels: this.pixelDiagnosticsEnabled ? `${visibleSamples}/${samplePoints.length}` : 'skipped',
       colorVariance,
       frame: this.frame,
+      fps: Number(performanceStats.fps.toFixed(1)),
+      averageFrameMs: Number(performanceStats.averageFrameMs.toFixed(2)),
+      averageWorkMs: Number(performanceStats.averageWorkMs.toFixed(2)),
+      lastFrameMs: Number(performanceStats.lastFrameMs.toFixed(2)),
+      lastWorkMs: Number(performanceStats.lastWorkMs.toFixed(2)),
+      maxFrameMs: Number(performanceStats.maxFrameMs.toFixed(2)),
+      maxWorkMs: Number(performanceStats.maxWorkMs.toFixed(2)),
+      hitchCount: performanceStats.hitchCount,
+      lastHitchMs: Number(performanceStats.lastHitchMs.toFixed(2)),
+      longestHitchMs: Number(performanceStats.longestHitchMs.toFixed(2)),
+      hitchThresholdMs: HITCH_FRAME_THRESHOLD_MS,
       tornadoX: Number(this.tornado.position.x.toFixed(2)),
       tornadoZ: Number(this.tornado.position.z.toFixed(2)),
+      stormCategory: profile.category,
+      stormMass: Math.round(profile.mass),
+      stormRadius: Number(profile.radius.toFixed(2)),
+      stormPullRadius: Number(profile.pullRadius.toFixed(2)),
+      stormLiftLimit: Number(profile.liftLimit.toFixed(2)),
       debrisCount: this.debris.length,
       pendingAbsorptions: this.pendingAbsorbedItems.length,
       generatedChunks: this.town.generatedChunks.size,
@@ -718,6 +857,13 @@ export class Game {
       groundScars: this.town.groundScars.length,
       drawCalls: renderInfo.calls,
       triangles: renderInfo.triangles,
+      sceneObjects: sceneStats.sceneObjects,
+      sceneMeshes: sceneStats.meshes,
+      sceneGroups: sceneStats.groups,
+      sceneLights: sceneStats.lights,
+      sceneMaterials: sceneStats.materials,
+      geometries: this.renderer.info.memory.geometries,
+      textures: this.renderer.info.memory.textures,
       pixelRatio: this.renderer.getPixelRatio(),
       cameraZoomScale: Number((this.cameraOffset.z / BASE_CAMERA_OFFSET.z).toFixed(3)),
       cameraFov: Number(this.camera.fov.toFixed(2)),
@@ -747,8 +893,24 @@ export class Game {
       sampledPixels: diagnostics.sampledPixels,
       colorVariance: String(diagnostics.colorVariance),
       frame: String(diagnostics.frame),
+      fps: String(diagnostics.fps),
+      averageFrameMs: String(diagnostics.averageFrameMs),
+      averageWorkMs: String(diagnostics.averageWorkMs),
+      lastFrameMs: String(diagnostics.lastFrameMs),
+      lastWorkMs: String(diagnostics.lastWorkMs),
+      maxFrameMs: String(diagnostics.maxFrameMs),
+      maxWorkMs: String(diagnostics.maxWorkMs),
+      hitchCount: String(diagnostics.hitchCount),
+      lastHitchMs: String(diagnostics.lastHitchMs),
+      longestHitchMs: String(diagnostics.longestHitchMs),
+      hitchThresholdMs: String(diagnostics.hitchThresholdMs),
       tornadoX: String(diagnostics.tornadoX),
       tornadoZ: String(diagnostics.tornadoZ),
+      stormCategory: String(diagnostics.stormCategory),
+      stormMass: String(diagnostics.stormMass),
+      stormRadius: String(diagnostics.stormRadius),
+      stormPullRadius: String(diagnostics.stormPullRadius),
+      stormLiftLimit: String(diagnostics.stormLiftLimit),
       debrisCount: String(diagnostics.debrisCount),
       pendingAbsorptions: String(diagnostics.pendingAbsorptions),
       generatedChunks: String(diagnostics.generatedChunks),
@@ -766,6 +928,13 @@ export class Game {
       groundScars: String(diagnostics.groundScars),
       drawCalls: String(diagnostics.drawCalls),
       triangles: String(diagnostics.triangles),
+      sceneObjects: String(diagnostics.sceneObjects),
+      sceneMeshes: String(diagnostics.sceneMeshes),
+      sceneGroups: String(diagnostics.sceneGroups),
+      sceneLights: String(diagnostics.sceneLights),
+      sceneMaterials: String(diagnostics.sceneMaterials),
+      geometries: String(diagnostics.geometries),
+      textures: String(diagnostics.textures),
       pixelRatio: String(diagnostics.pixelRatio),
       cameraZoomScale: String(diagnostics.cameraZoomScale),
       cameraFov: String(diagnostics.cameraFov),
@@ -791,5 +960,104 @@ export class Game {
     });
 
     window.__townfallDiagnostics = diagnostics;
+    this.updateDebugOverlay(diagnostics);
+  }
+
+  collectSceneStats() {
+    const materials = new Set();
+    const stats = createSceneStats();
+
+    this.scene.traverse((object) => {
+      stats.sceneObjects += 1;
+
+      if (object.isGroup) {
+        stats.groups += 1;
+      }
+
+      if (object.isLight) {
+        stats.lights += 1;
+      }
+
+      if (!object.isMesh) {
+        return;
+      }
+
+      stats.meshes += 1;
+      const meshMaterials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of meshMaterials) {
+        if (material) {
+          materials.add(material.uuid);
+        }
+      }
+    });
+
+    stats.materials = materials.size;
+    this.lastSceneStats = stats;
+    return stats;
+  }
+
+  updateDebugOverlay(diagnostics) {
+    if (!this.debugOverlayVisible || !this.diagnosticsElement) {
+      return;
+    }
+
+    this.diagnosticsElement.innerHTML = `
+      <div class="diagnostics__header">
+        <span>Diagnostics</span>
+        <strong>F3</strong>
+      </div>
+      ${this.renderDebugSection('Performance', [
+        ['FPS', formatDebugNumber(diagnostics.fps, 1)],
+        ['Frame Avg / Max', `${formatDebugNumber(diagnostics.averageFrameMs, 1)} / ${formatDebugNumber(diagnostics.maxFrameMs, 1)} ms`],
+        ['Work Avg / Max', `${formatDebugNumber(diagnostics.averageWorkMs, 1)} / ${formatDebugNumber(diagnostics.maxWorkMs, 1)} ms`],
+        ['Hitches', `${formatDebugNumber(diagnostics.hitchCount)} over ${formatDebugNumber(diagnostics.hitchThresholdMs)} ms`],
+        ['Worst Hitch', `${formatDebugNumber(diagnostics.longestHitchMs, 1)} ms`],
+      ])}
+      ${this.renderDebugSection('Render', [
+        ['Draw Calls', formatDebugNumber(diagnostics.drawCalls)],
+        ['Triangles', formatDebugNumber(diagnostics.triangles)],
+        ['Scene Objects', formatDebugNumber(diagnostics.sceneObjects)],
+        ['Meshes / Groups', `${formatDebugNumber(diagnostics.sceneMeshes)} / ${formatDebugNumber(diagnostics.sceneGroups)}`],
+        ['Geometries / Textures', `${formatDebugNumber(diagnostics.geometries)} / ${formatDebugNumber(diagnostics.textures)}`],
+        ['Pixel Ratio', formatDebugNumber(diagnostics.pixelRatio, 2)],
+      ])}
+      ${this.renderDebugSection('Town', [
+        ['Chunks', formatDebugNumber(diagnostics.generatedChunks)],
+        ['Items', formatDebugNumber(diagnostics.totalItems)],
+        ['Visible Items', formatDebugNumber(diagnostics.visibleItems)],
+        ['Simulated / Candidates', `${formatDebugNumber(diagnostics.simulatedItems)} / ${formatDebugNumber(diagnostics.candidateItems)}`],
+        ['Active / Throttled', `${formatDebugNumber(diagnostics.activeItems)} / ${formatDebugNumber(diagnostics.throttledCandidates)}`],
+      ])}
+      ${this.renderDebugSection('Effects', [
+        ['Scene Debris', formatDebugNumber(diagnostics.debrisCount)],
+        ['Pending Absorptions', formatDebugNumber(diagnostics.pendingAbsorptions)],
+        ['Town Pieces', `${formatDebugNumber(diagnostics.effectPieces)} made, ${formatDebugNumber(diagnostics.skippedEffectPieces)} skipped`],
+        ['Ground Scars', formatDebugNumber(diagnostics.groundScars)],
+      ])}
+      ${this.renderDebugSection('Storm', [
+        ['Mode / Level', `${diagnostics.gameMode ?? 'menu'} / ${formatDebugNumber(diagnostics.levelNumber)}`],
+        ['Category / Mass', `${formatDebugNumber(diagnostics.stormCategory)} / ${formatDebugNumber(diagnostics.stormMass)}`],
+        ['Radius / Pull', `${formatDebugNumber(diagnostics.stormRadius, 1)} / ${formatDebugNumber(diagnostics.stormPullRadius, 1)}`],
+        ['Lift Limit', formatDebugNumber(diagnostics.stormLiftLimit, 1)],
+        ['Camera Zoom', `${formatDebugNumber(diagnostics.cameraZoomScale, 2)}x`],
+        ['Fog', formatDebugNumber(diagnostics.fogDensity, 4)],
+      ])}
+    `;
+  }
+
+  renderDebugSection(title, rows) {
+    const renderedRows = rows.map(([label, value]) => `
+      <div class="diagnostics__row">
+        <span>${label}</span>
+        <strong>${value}</strong>
+      </div>
+    `).join('');
+
+    return `
+      <section class="diagnostics__section">
+        <h2>${title}</h2>
+        ${renderedRows}
+      </section>
+    `;
   }
 }

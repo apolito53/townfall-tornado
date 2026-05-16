@@ -227,6 +227,32 @@ try {
       errors.push(`${viewport.name}: shader stack did not report active intensity/bloom (${JSON.stringify(upgradedDiagnostics)})`);
     }
 
+    await page.keyboard.press('F3');
+    await page.waitForFunction(
+      () => document.querySelector('#diagnostics')?.hidden === false
+        && document.querySelector('#diagnostics')?.textContent?.includes('FPS'),
+      undefined,
+      { timeout: 3000 },
+    );
+    const debugOverlay = await page.evaluate(() => ({
+      text: document.querySelector('#diagnostics')?.textContent ?? '',
+      diagnostics: window.__townfallDiagnostics,
+    }));
+    if (
+      !debugOverlay.text.includes('Performance')
+      || typeof debugOverlay.diagnostics.fps !== 'number'
+      || typeof debugOverlay.diagnostics.hitchCount !== 'number'
+      || debugOverlay.diagnostics.sceneObjects <= 0
+    ) {
+      errors.push(`${viewport.name}: debug overlay did not report performance/object diagnostics (${JSON.stringify(debugOverlay)})`);
+    }
+    await page.keyboard.press('F3');
+    await page.waitForFunction(
+      () => document.querySelector('#diagnostics')?.hidden === true,
+      undefined,
+      { timeout: 3000 },
+    );
+
     await page.evaluate(() => {
       const game = window.__townfallGame;
       game.tornado.mass = 12000;

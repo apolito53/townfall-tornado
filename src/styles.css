@@ -402,6 +402,91 @@ body {
   outline: none;
 }
 
+#diagnostics {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 30;
+  width: min(340px, calc(100vw - 28px));
+  max-height: min(78vh, 680px);
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid rgba(255, 246, 210, 0.26);
+  border-radius: 8px;
+  background: rgba(10, 14, 13, 0.82);
+  box-shadow: 0 18px 56px rgba(4, 7, 6, 0.42);
+  backdrop-filter: blur(10px);
+  color: #f7f2df;
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    monospace;
+  font-size: 0.72rem;
+  pointer-events: none;
+}
+
+#diagnostics[hidden] {
+  display: none;
+}
+
+.diagnostics__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 246, 210, 0.16);
+}
+
+.diagnostics__header span,
+.diagnostics__section h2 {
+  margin: 0;
+  color: rgba(247, 242, 223, 0.64);
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.diagnostics__header strong {
+  display: inline-grid;
+  min-width: 30px;
+  min-height: 22px;
+  place-items: center;
+  border: 1px solid rgba(255, 246, 210, 0.22);
+  border-radius: 6px;
+  background: rgba(72, 91, 73, 0.55);
+  color: #fff6d2;
+  font-size: 0.68rem;
+}
+
+.diagnostics__section {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.diagnostics__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.diagnostics__row span {
+  overflow: hidden;
+  color: rgba(247, 242, 223, 0.58);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagnostics__row strong {
+  color: #fff6d2;
+  font-weight: 800;
+  text-align: right;
+}
+
 @media (max-width: 720px) {
   .hud {
     left: 10px;
@@ -459,5 +544,14 @@ body {
 
   .mode-button {
     min-height: 82px;
+  }
+
+  #diagnostics {
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    max-height: 52vh;
+    font-size: 0.66rem;
   }
 }

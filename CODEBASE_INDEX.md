@@ -10,7 +10,7 @@
 
 ## Main Files
 
-- `src/game.ts` owns scene setup, renderer, post-processing composer, pause state, perspective slider state, level progression, category-scaled objective targets, minimum level duration pacing, queued absorption rewards, category-scaled lower oblique camera follow with adaptive fog, loop timing, score, timer, capped scene debris bursts, capped render quality, shadow refresh scheduling, and performance/render diagnostics.
+- `src/game.ts` owns scene setup, renderer, post-processing composer, pause state, perspective slider state, level progression, category-scaled objective targets, minimum level duration pacing, queued absorption rewards, category-scaled lower oblique camera follow with adaptive fog, loop timing, score, timer, capped scene debris bursts, capped render quality, shadow refresh scheduling, `F3` debug overlay state, and performance/render diagnostics.
 - `src/categoryProgression.ts` owns the very steep log-spaced tornado category mass requirements shared by gameplay and the HUD growth meter.
 - `src/stormAtmosphereShader.ts` owns the full-screen storm grading shader for humid haze, dark cloud shadowing, rain streaks, grain, vignette, and lightning wash.
 - `src/tornado.ts` owns tornado growth stats, category thresholds, dramatic diameter scaling, taller wiggly sky-connected funnel visuals, procedural smoky funnel/storm-sky textures, wall cloud curtains, dust, and airborne debris.
@@ -27,7 +27,7 @@
 - Change levels, category-scaled score/damage targets, queued absorption pacing, timer, combo, pause behavior, camera angle/zoom/fog composition, post-processing setup, scene debris caps, minimum level duration, or diagnostics in `src/game.ts`.
 - Tune screen-space storm realism in `src/stormAtmosphereShader.ts`: color grade, haze, rain streaks, vignette, grain, and lightning response.
 - Change visual layout and responsive HUD behavior in `src/styles.css`.
-- Level tracker and pause menu markup live in `index.html`, with compact HUD, level tracker, and pause overlay styling in `src/styles.css`.
+- Level tracker, pause menu, and hidden diagnostics root markup live in `index.html`, with compact HUD, level tracker, pause overlay, and debug overlay styling in `src/styles.css`.
 
 ## Validation Commands
 
@@ -43,6 +43,7 @@ $env:TOWNFALL_URL='http://127.0.0.1:5175/'; npm.cmd run verify:render
 
 - Automated tests sample WebGL pixels from the main canvas, so `preserveDrawingBuffer` is enabled in `src/game.ts`; normal in-game diagnostics avoid recurring `readPixels` stalls.
 - `src/main.ts` exposes `window.__townfallGame` for local browser tuning and automated scaling checks.
+- Press `F3` or add `?debug` to the local URL to show the diagnostics overlay; it reuses `#diagnostics` while preserving the dataset fields used by smoke tests.
 - Category mass targets are shared from `src/categoryProgression.ts`; keep the HUD and `src/tornado.ts` using that source instead of duplicating thresholds. Current gates are intentionally steep: Cat 2 at 55, Cat 3 at 250, Cat 4 at 943, Cat 5 at 3404.
 - The game renders through `EffectComposer`; resize, manually reset renderer info, on-change shadow refreshes, and shader diagnostics are wired from `src/game.ts`.
 - This first prototype uses simple custom suction and structural-stress physics rather than a full rigid-body engine.

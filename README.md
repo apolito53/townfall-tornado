@@ -27,6 +27,7 @@ No logging server is currently wired here; keep `5176` reserved for one if it ge
 - Pointer/touch drag steers from the screen center.
 - `Pause` opens the storm control menu.
 - The pause menu contains `Resume`, `Restart`, and a perspective slider for low-to-high camera angle.
+- `F3` toggles the debug overlay with FPS, frame hitches, object counts, town budgets, and render counters.
 
 ## Validation
 
