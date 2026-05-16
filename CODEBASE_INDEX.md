@@ -3,6 +3,7 @@
 ## Stack
 
 - Vite app with Three.js.
+- Public Vercel deployment: `https://townfall-tornado.vercel.app/`.
 - Entry point: `src/main.ts`.
 - Runtime surface: full-window WebGL canvas plus lightweight HTML HUD.
 - Build config: `vite.config.js` keeps the expected Three.js bundle warning quiet and pins strict local ports.
