@@ -17,7 +17,8 @@ const FRAME_STATIC_PIECE_BUDGET = 36;
 const FRAME_COLLAPSE_SCAR_BUDGET = 8;
 const STRUCTURAL_GENERATED_PIECE_LIMIT = 34;
 const MINOR_GENERATED_PIECE_LIMIT = 12;
-const MAX_TOWN_ITEMS_UPDATED_PER_FRAME = 460;
+const MAX_TOWN_ITEMS_UPDATED_PER_FRAME = 560;
+const MAX_ACTIVE_CARRYOVER_SHARE = 0.45;
 
 const MATERIALS = {
   grass: new THREE.MeshStandardMaterial({ color: 0x5c8f5c, roughness: 0.95 }),
@@ -89,6 +90,9 @@ function createSimulationStats() {
     totalItems: 0,
     candidateItems: 0,
     activeItems: 0,
+    activeCarryoverItems: 0,
+    activeCandidateItems: 0,
+    freshCandidateItems: 0,
     simulatedItems: 0,
     throttledCandidates: 0,
     absorbedItems: 0,
@@ -1025,8 +1029,8 @@ export class Town {
     this.applyStormGroundDamage(stormPosition, stormProfile, dt);
 
     const candidateItems = this.collectNearbyItems(stormPosition, stormProfile.pullRadius + MAX_INTERACTION_RADIUS);
-    const activeItemCount = this.activeItems.size;
-    const itemsToUpdate = this.selectItemsForSimulation(candidateItems);
+    const simulationSelection = this.selectItemsForSimulation(candidateItems, stormPosition);
+    const itemsToUpdate = simulationSelection.items;
     this.activeItems.clear();
 
     for (const item of itemsToUpdate) {
@@ -1050,8 +1054,14 @@ export class Town {
       totalItems: this.items.length,
       candidateItems: candidateItems.size,
       activeItems: this.activeItems.size,
+      activeCarryoverItems: simulationSelection.activeCarryoverItems,
+      activeCandidateItems: simulationSelection.activeCandidateItems,
+      freshCandidateItems: simulationSelection.freshCandidateItems,
       simulatedItems: itemsToUpdate.length,
-      throttledCandidates: Math.max(0, candidateItems.size + activeItemCount - itemsToUpdate.length),
+      throttledCandidates: Math.max(
+        0,
+        candidateItems.size - simulationSelection.activeCandidateItems - simulationSelection.freshCandidateItems,
+      ),
       absorbedItems: absorbedItems.length,
       effectPieces: effectBudget.createdPieces,
       skippedEffectPieces: effectBudget.skippedPieces,
@@ -1061,15 +1071,28 @@ export class Town {
     return absorbedItems;
   }
 
-  selectItemsForSimulation(candidateItems) {
+  selectItemsForSimulation(candidateItems, stormPosition) {
     const activeItems = [...this.activeItems];
     const activeSet = new Set(activeItems);
+    // Damaged pieces can need several frames of suction/collapse simulation. Once the
+    // funnel gets huge, those carryover items must not starve fresh buildings that
+    // have just entered the interaction radius.
+    const activeBudget = Math.min(
+      activeItems.length,
+      Math.floor(MAX_TOWN_ITEMS_UPDATED_PER_FRAME * MAX_ACTIVE_CARRYOVER_SHARE),
+    );
+    const selectedActiveItems = this.selectNearestItems(activeItems, stormPosition, activeBudget);
     const inactiveCandidates = [...candidateItems].filter((item) => !activeSet.has(item));
-    const availableCandidateSlots = Math.max(0, MAX_TOWN_ITEMS_UPDATED_PER_FRAME - activeItems.length);
+    const availableCandidateSlots = Math.max(0, MAX_TOWN_ITEMS_UPDATED_PER_FRAME - selectedActiveItems.length);
 
     if (inactiveCandidates.length <= availableCandidateSlots) {
       this.simulationCursor = 0;
-      return [...activeItems, ...inactiveCandidates];
+      return {
+        items: [...selectedActiveItems, ...inactiveCandidates],
+        activeCarryoverItems: selectedActiveItems.length,
+        activeCandidateItems: selectedActiveItems.filter((item) => candidateItems.has(item)).length,
+        freshCandidateItems: inactiveCandidates.length,
+      };
     }
 
     const selectedCandidates = [];
@@ -1079,7 +1102,27 @@ export class Town {
     }
 
     this.simulationCursor = (startCursor + availableCandidateSlots) % inactiveCandidates.length;
-    return [...activeItems, ...selectedCandidates];
+    return {
+      items: [...selectedActiveItems, ...selectedCandidates],
+      activeCarryoverItems: selectedActiveItems.length,
+      activeCandidateItems: selectedActiveItems.filter((item) => candidateItems.has(item)).length,
+      freshCandidateItems: selectedCandidates.length,
+    };
+  }
+
+  selectNearestItems(items, position, limit) {
+    if (items.length <= limit) {
+      return items;
+    }
+
+    return items
+      .map((item) => ({
+        item,
+        distanceSq: item.group.position.distanceToSquared(position),
+      }))
+      .sort((a, b) => a.distanceSq - b.distanceSq)
+      .slice(0, limit)
+      .map((entry) => entry.item);
   }
 
   collectNearbyItems(position, radius) {

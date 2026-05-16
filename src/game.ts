@@ -183,6 +183,8 @@ export class Game {
     this.perspectiveAmount = 0.35;
     this.frame = 0;
     this.lastDiagnosticsAt = 0;
+    this.lastHitchLogAt = 0;
+    this.lastSimulationPressureLogAt = 0;
     this.weatherTime = 0;
     this.lightningTimer = 4.8;
     this.lightningEnergy = 0;
@@ -490,6 +492,18 @@ export class Game {
       stats.hitchCount += 1;
       stats.lastHitchMs = frameMs;
       stats.longestHitchMs = Math.max(stats.longestHitchMs, frameMs);
+
+      const now = performance.now();
+      if (now - this.lastHitchLogAt > 2000) {
+        this.lastHitchLogAt = now;
+        window.__townfallLog?.('warn', 'frame-hitch', {
+          frameMs: Number(frameMs.toFixed(2)),
+          workMs: Number(workMs.toFixed(2)),
+          thresholdMs: HITCH_FRAME_THRESHOLD_MS,
+          hitchCount: stats.hitchCount,
+          longestHitchMs: Number(stats.longestHitchMs.toFixed(2)),
+        });
+      }
     }
 
     const now = performance.now();
@@ -807,6 +821,9 @@ export class Game {
       totalItems: townStats.totalItems,
       candidateItems: townStats.candidateItems,
       activeItems: townStats.activeItems,
+      activeCarryoverItems: townStats.activeCarryoverItems,
+      activeCandidateItems: townStats.activeCandidateItems,
+      freshCandidateItems: townStats.freshCandidateItems,
       simulatedItems: townStats.simulatedItems,
       throttledCandidates: townStats.throttledCandidates,
       absorbedItems: townStats.absorbedItems,
@@ -895,6 +912,9 @@ export class Game {
       totalItems: String(diagnostics.totalItems),
       candidateItems: String(diagnostics.candidateItems),
       activeItems: String(diagnostics.activeItems),
+      activeCarryoverItems: String(diagnostics.activeCarryoverItems),
+      activeCandidateItems: String(diagnostics.activeCandidateItems),
+      freshCandidateItems: String(diagnostics.freshCandidateItems),
       simulatedItems: String(diagnostics.simulatedItems),
       throttledCandidates: String(diagnostics.throttledCandidates),
       absorbedItems: String(diagnostics.absorbedItems),
@@ -945,7 +965,37 @@ export class Game {
     });
 
     window.__townfallDiagnostics = diagnostics;
+    this.logSimulationPressure(diagnostics);
     this.updateDebugOverlay(diagnostics);
+  }
+
+  logSimulationPressure(diagnostics) {
+    if (diagnostics.candidateItems <= 0) {
+      return;
+    }
+
+    const throttledRatio = diagnostics.throttledCandidates / diagnostics.candidateItems;
+    if (diagnostics.candidateItems < 80 || throttledRatio < 0.65) {
+      return;
+    }
+
+    const now = performance.now();
+    if (now - this.lastSimulationPressureLogAt < 5000) {
+      return;
+    }
+
+    this.lastSimulationPressureLogAt = now;
+    window.__townfallLog?.('warn', 'town-simulation-pressure', {
+      category: diagnostics.stormCategory,
+      mass: diagnostics.stormMass,
+      candidateItems: diagnostics.candidateItems,
+      simulatedItems: diagnostics.simulatedItems,
+      activeCarryoverItems: diagnostics.activeCarryoverItems,
+      activeCandidateItems: diagnostics.activeCandidateItems,
+      freshCandidateItems: diagnostics.freshCandidateItems,
+      throttledCandidates: diagnostics.throttledCandidates,
+      throttledRatio: Number(throttledRatio.toFixed(3)),
+    });
   }
 
   collectSceneStats() {
@@ -1013,6 +1063,7 @@ export class Game {
         ['Proxy Items', `${formatDebugNumber(diagnostics.visibleInstancedTownProxies)} / ${formatDebugNumber(diagnostics.instancedTownProxies)}`],
         ['Proxy Instances', `${formatDebugNumber(diagnostics.visibleInstancedTownInstances)} / ${formatDebugNumber(diagnostics.instancedTownInstances)}`],
         ['Simulated / Candidates', `${formatDebugNumber(diagnostics.simulatedItems)} / ${formatDebugNumber(diagnostics.candidateItems)}`],
+        ['Carry / Fresh', `${formatDebugNumber(diagnostics.activeCarryoverItems)} / ${formatDebugNumber(diagnostics.freshCandidateItems)}`],
         ['Active / Throttled', `${formatDebugNumber(diagnostics.activeItems)} / ${formatDebugNumber(diagnostics.throttledCandidates)}`],
       ])}
       ${this.renderDebugSection('Effects', [

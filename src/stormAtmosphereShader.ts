@@ -84,6 +84,12 @@ export const StormAtmosphereShader = {
       float vignette = smoothstep(0.42, 0.86, distance(vUv, vec2(0.5)));
       color *= 1.0 - vignette * (0.12 + storm * 0.045);
 
+      // Keep edge-of-frame town geometry readable. The storm grade should feel heavy,
+      // but it should not crush distant LOD boxes or foreground houses into pure black.
+      float townReadabilityMask = smoothstep(0.58, 0.02, vUv.y);
+      vec3 shadowFloor = vec3(0.052, 0.064, 0.054) * (0.85 + storm * 0.45);
+      color = max(color, shadowFloor * townReadabilityMask);
+
       float grain = hash(vUv * resolution.xy + time * 60.0) - 0.5;
       color += grain * (0.006 + storm * 0.004);
 

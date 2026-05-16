@@ -11,15 +11,21 @@ npm.cmd run dev
 
 Then open `http://127.0.0.1:5175/`.
 
+Optional live browser log capture:
+
+```powershell
+npm.cmd run debug:logs
+```
+
+Open the game with `?debugLogs` once to enable browser log capture. The page then connects to `127.0.0.1:5176` and streams console warnings/errors, uncaught errors, frame hitches, and town simulation pressure events into `logs/townfall-debug-YYYY-MM-DD.jsonl`. Use `?noDebugLogs` to turn the browser capture back off.
+
 ## Local Ports
 
 This Vite project has a dedicated strict port assignment so it can run beside the other browser prototypes:
 
 - Base Vite server: `5175`
-- Reserved logging/debug receiver: `5176`
+- Browser logging/debug receiver: `5176`
 - Preview server: `4175`
-
-No logging server is currently wired here; keep `5176` reserved for one if it gets added.
 
 ## Controls
 

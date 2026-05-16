@@ -258,6 +258,7 @@ try {
       !debugOverlay.text.includes('Performance')
       || !debugOverlay.text.includes('Particles')
       || !debugOverlay.text.includes('Proxy Items')
+      || !debugOverlay.text.includes('Carry / Fresh')
       || typeof debugOverlay.diagnostics.fps !== 'number'
       || typeof debugOverlay.diagnostics.hitchCount !== 'number'
       || debugOverlay.diagnostics.sceneObjects <= 0
@@ -282,6 +283,14 @@ try {
     const stressDiagnostics = await page.evaluate(() => window.__townfallDiagnostics);
     if (stressDiagnostics.simulatedItems > 560) {
       errors.push(`${viewport.name}: huge storm simulation budget was exceeded (${stressDiagnostics.simulatedItems})`);
+    }
+
+    if (typeof stressDiagnostics.freshCandidateItems !== 'number' || stressDiagnostics.freshCandidateItems <= 0) {
+      errors.push(`${viewport.name}: huge storm did not reserve simulation budget for fresh town candidates (${JSON.stringify(stressDiagnostics)})`);
+    }
+
+    if (stressDiagnostics.activeCarryoverItems > 260) {
+      errors.push(`${viewport.name}: active town carryover monopolized the huge storm simulation budget (${JSON.stringify(stressDiagnostics)})`);
     }
 
     if (

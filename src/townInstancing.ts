@@ -2,46 +2,54 @@ import * as THREE from 'three';
 
 const ZERO_SCALE = new THREE.Vector3(0, 0, 0);
 
+function createProxyMaterial(color, vertexColors = false) {
+  return new THREE.MeshBasicMaterial({
+    color,
+    fog: true,
+    vertexColors,
+  });
+}
+
 const BATCH_DEFINITIONS = {
   houseBody: {
     capacity: 7200,
     geometry: new THREE.BoxGeometry(1, 1, 1),
-    material: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.84, vertexColors: true }),
+    material: createProxyMaterial(0xffffff, true),
   },
   houseRoof: {
     capacity: 7200,
     geometry: new THREE.BoxGeometry(1, 1, 1),
-    material: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.78, vertexColors: true }),
+    material: createProxyMaterial(0xffffff, true),
   },
   treeTrunk: {
     capacity: 5200,
     geometry: new THREE.CylinderGeometry(1, 1, 1, 8),
-    material: new THREE.MeshStandardMaterial({ color: 0x745035, roughness: 0.94 }),
+    material: createProxyMaterial(0x745035),
   },
   treeCanopy: {
     capacity: 5200,
     geometry: new THREE.IcosahedronGeometry(1, 1),
-    material: new THREE.MeshStandardMaterial({ color: 0x31774a, roughness: 0.9 }),
+    material: createProxyMaterial(0x31774a),
   },
   fence: {
     capacity: 8200,
     geometry: new THREE.BoxGeometry(1, 1, 1),
-    material: new THREE.MeshStandardMaterial({ color: 0xd6c4a2, roughness: 0.95 }),
+    material: createProxyMaterial(0xd6c4a2),
   },
   carBody: {
     capacity: 3600,
     geometry: new THREE.BoxGeometry(1, 1, 1),
-    material: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.66, vertexColors: true }),
+    material: createProxyMaterial(0xffffff, true),
   },
   carCabin: {
     capacity: 3600,
     geometry: new THREE.BoxGeometry(1, 1, 1),
-    material: new THREE.MeshStandardMaterial({ color: 0x8fb1c2, roughness: 0.38 }),
+    material: createProxyMaterial(0x8fb1c2),
   },
   roadStripe: {
     capacity: 18000,
     geometry: new THREE.BoxGeometry(1, 1, 1),
-    material: new THREE.MeshStandardMaterial({ color: 0xe9d878, roughness: 0.85 }),
+    material: createProxyMaterial(0xe9d878),
   },
 };
 

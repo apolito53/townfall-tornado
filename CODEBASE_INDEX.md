@@ -12,6 +12,7 @@
 
 - `src/game.ts` owns scene setup, renderer, post-processing composer, pause state, perspective slider state, level progression, category-scaled objective targets, minimum level duration pacing, queued absorption rewards, category-scaled lower oblique camera follow with adaptive fog, loop timing, score, timer, capped scene debris bursts, capped render quality, shadow refresh scheduling, `F3` debug overlay state, and performance/render diagnostics.
 - `src/categoryProgression.ts` owns the very steep log-spaced tornado category mass requirements shared by gameplay and the HUD growth meter.
+- `src/debugLogger.ts` connects to the optional local debug receiver after `?debugLogs`/`localStorage` opt-in and streams console warnings/errors, uncaught errors, frame hitches, and town simulation pressure breadcrumbs when it is running.
 - `src/debrisParticles.ts` owns the pooled GPU debris layer: shader-driven dust/fleck particles plus strict-capacity instanced chunk debris.
 - `src/stormAtmosphereShader.ts` owns the full-screen storm grading shader for humid haze, dark cloud shadowing, rain streaks, grain, vignette, and lightning wash.
 - `src/townInstancing.ts` owns the instanced far-town proxy renderer for simple house/shop LODs, trees, fences, cars, and road stripes.
@@ -20,6 +21,7 @@
 - `src/input.ts` translates keyboard and pointer/touch steering into a normalized movement vector.
 - `src/ui.ts` updates the level tracker, HUD, growth bar, timer, and short storm messages.
 - `src/globals.d.ts` declares local browser diagnostics hooks used by the smoke tests.
+- `scripts/debug-log-server.mjs` runs the optional `127.0.0.1:5176` JSONL log receiver and exposes `/health`, `/log`, and `/recent` for live debugging.
 - `scripts/verify-render.mjs` runs a Playwright smoke test against a live dev server, saves screenshots, and verifies high-category radius/camera scaling, level UI, minimum-duration level pacing, level advancement, active post-processing diagnostics, capped pixel ratio, capped debris/effects, render LOD, and town simulation culling through the local `window.__townfallGame` hook.
 
 ## Common Change Targets
@@ -42,14 +44,17 @@ $env:TOWNFALL_URL='http://127.0.0.1:5175/'; npm.cmd run verify:render
 ```
 
 `verify:render` expects the Vite dev server to be running on `http://127.0.0.1:5175/`.
+`npm.cmd run debug:logs` is optional during normal play; open the app with `?debugLogs` to opt the browser into appending events under ignored `logs/` JSONL files.
 
 ## Sharp Edges
 
 - Automated tests sample WebGL pixels from the main canvas, so `preserveDrawingBuffer` is enabled in `src/game.ts`; normal in-game diagnostics avoid recurring `readPixels` stalls.
 - `src/main.ts` exposes `window.__townfallGame` for local browser tuning and automated scaling checks.
 - Press `F3` or add `?debug` to the local URL to show the diagnostics overlay; it reuses `#diagnostics` while preserving the dataset fields used by smoke tests.
+- Run `npm.cmd run debug:logs` beside the Vite server, then open the app with `?debugLogs`, to capture browser-side warnings/errors, uncaught errors, frame hitches, and town simulation pressure events as JSONL on port `5176`.
 - Category mass targets are shared from `src/categoryProgression.ts`; keep the HUD and `src/tornado.ts` using that source instead of duplicating thresholds. Current gates are intentionally steep: Cat 2 at 55, Cat 3 at 250, Cat 4 at 943, Cat 5 at 3404.
 - The game renders through `EffectComposer`; resize, manually reset renderer info, on-change shadow refreshes, and shader diagnostics are wired from `src/game.ts`.
 - This first prototype uses simple custom suction and structural-stress physics rather than a full rigid-body engine.
 - Tiny debris particles are visual only and intentionally have no collision; they are GPU-shader points and pooled instanced chunks so long Cat 4/Cat 5 runs do not create thousands of short-lived scene objects.
-- Procedural town chunks are generated around the tornado's current chunk and stay loaded; distant houses/shops/trees/fences/cars/road stripes render through instanced proxies, while full destructible models are promoted inside the interaction/detail bubble. Full chunk unloading is still the next big lever if long runs get dense.
+- Procedural town chunks are generated around the tornado's current chunk and stay loaded; distant houses/shops/trees/fences/cars/road stripes render through fog-aware instanced proxy materials, while full destructible models are promoted inside the interaction/detail bubble. Full chunk unloading is still the next big lever if long runs get dense.
+- Large storms can have more destructible candidates than the per-frame budget can process; `src/town.ts` caps active carryover work so fresh nearby candidates continue receiving interaction updates instead of being starved by already-damaged items.

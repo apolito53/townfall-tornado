@@ -1,5 +1,8 @@
 import { Game } from './game';
+import { initDebugLogger } from './debugLogger';
 import './styles.css';
+
+initDebugLogger();
 
 const game = new Game({
   canvas: document.querySelector('#game-canvas'),

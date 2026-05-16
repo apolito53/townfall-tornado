@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
+    "debug:logs": "node scripts/debug-log-server.mjs",
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "verify:render": "node scripts/verify-render.mjs"
