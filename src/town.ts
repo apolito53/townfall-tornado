@@ -12,6 +12,10 @@ const SIMULATION_CELL_SIZE = 24;
 const MAX_INTERACTION_RADIUS = 12;
 const DETAIL_LOD_RADIUS_BY_CATEGORY = [64, 76, 88, 100, 116];
 const MINOR_PROP_RADIUS_BY_CATEGORY = [76, 88, 104, 122, 146];
+const STRUCTURAL_PROXY_RADIUS_BY_CATEGORY = [210, 240, 285, 335, 395];
+const DETAIL_LOD_BLEND_BAND = 42;
+const MINOR_PROP_BLEND_BAND = 34;
+const STRUCTURAL_PROXY_FADE_BAND = 112;
 const FRAME_DYNAMIC_PIECE_BUDGET = 72;
 const FRAME_STATIC_PIECE_BUDGET = 36;
 const FRAME_COLLAPSE_SCAR_BUDGET = 8;
@@ -128,7 +132,26 @@ function createRenderBudgetStats() {
     visibleParts: 0,
     totalParts: 0,
     detailedItems: 0,
+    proxyBlendItems: 0,
+    fadedProxyItems: 0,
   };
+}
+
+function scaledLodBlendBand(baseSize, qualityScale) {
+  const lowQualityBias = THREE.MathUtils.clamp(1.15 - qualityScale, 0, 0.75);
+  return baseSize * (1 + lowQualityBias * 0.9);
+}
+
+function smoothDistanceStep(distance, innerRadius, outerRadius) {
+  if (outerRadius <= innerRadius) {
+    return distance >= outerRadius ? 1 : 0;
+  }
+
+  return THREE.MathUtils.smoothstep(distance, innerRadius, outerRadius);
+}
+
+function visibilityInsideRadius(distance, radius, fadeBand) {
+  return 1 - smoothDistanceStep(distance, radius, radius + fadeBand);
 }
 
 function materialToDebrisColor(material) {
@@ -462,7 +485,7 @@ class Destructible {
     this.renderProxy = renderProxy;
   }
 
-  setDetailedActive(isDetailed) {
+  setDetailedActive(isDetailed, hideProxy = true) {
     if (!this.renderParent) {
       return;
     }
@@ -473,7 +496,9 @@ class Destructible {
         this.renderParent.add(this.group);
       }
       this.group.visible = !this.destroyed;
-      this.setProxyVisible(false);
+      if (hideProxy) {
+        this.setProxyVisible(false);
+      }
       return;
     }
 
@@ -484,7 +509,17 @@ class Destructible {
   }
 
   setProxyVisible(isVisible) {
-    this.proxyRenderer?.setProxyVisible(this.renderProxy, Boolean(isVisible && !this.destroyed));
+    this.setProxyVisibility(isVisible ? 1 : 0);
+  }
+
+  setProxyVisibility(amount = 0) {
+    const visibleAmount = this.destroyed ? 0 : amount;
+    if (this.proxyRenderer?.setProxyVisibility) {
+      this.proxyRenderer.setProxyVisibility(this.renderProxy, visibleAmount);
+      return;
+    }
+
+    this.proxyRenderer?.setProxyVisible(this.renderProxy, visibleAmount > 0);
   }
 
   collectParts() {
@@ -924,23 +959,51 @@ class Destructible {
     const distanceX = this.group.position.x - focusPosition.x;
     const distanceZ = this.group.position.z - focusPosition.z;
     const distanceSq = distanceX * distanceX + distanceZ * distanceZ;
+    const distance = Math.sqrt(distanceSq);
     const categoryIndex = Math.min(DETAIL_LOD_RADIUS_BY_CATEGORY.length - 1, Math.max(0, category - 1));
     const detailRadius = DETAIL_LOD_RADIUS_BY_CATEGORY[categoryIndex] * qualityScale;
     const minorPropRadius = MINOR_PROP_RADIUS_BY_CATEGORY[categoryIndex] * qualityScale;
+    const detailBlendBand = scaledLodBlendBand(DETAIL_LOD_BLEND_BAND, qualityScale);
+    const minorBlendBand = scaledLodBlendBand(MINOR_PROP_BLEND_BAND, qualityScale);
+    const structuralFadeBand = scaledLodBlendBand(STRUCTURAL_PROXY_FADE_BAND, qualityScale);
+    const proxyHorizonScale = THREE.MathUtils.lerp(
+      0.78,
+      1.12,
+      THREE.MathUtils.clamp((qualityScale - 0.45) / 0.7, 0, 1),
+    );
+    const structuralProxyRadius = STRUCTURAL_PROXY_RADIUS_BY_CATEGORY[categoryIndex] * proxyHorizonScale;
     const active = this.needsOngoingSimulation();
     const isMinorProp = !this.isStructural;
-    const showWholeItem = !isMinorProp || active || distanceSq <= minorPropRadius * minorPropRadius;
-    const showFineDetail = active || distanceSq <= detailRadius * detailRadius;
-    const useDetailedModel = Boolean(showWholeItem && (!this.renderProxy || active || showFineDetail));
+    const detailVisibility = active ? 1 : visibilityInsideRadius(distance, detailRadius, detailBlendBand);
+    const proxyDistanceVisibility = active
+      ? 0
+      : smoothDistanceStep(distance, detailRadius - detailBlendBand * 0.2, detailRadius + detailBlendBand * 0.85);
+    const wholeItemVisibility = active
+      ? 1
+      : isMinorProp
+        ? visibilityInsideRadius(distance, minorPropRadius, minorBlendBand)
+        : visibilityInsideRadius(distance, structuralProxyRadius, structuralFadeBand);
+    const showWholeItem = wholeItemVisibility > 0.025 || active;
+    const showFineDetail = active || detailVisibility > 0.52;
+    const useDetailedModel = Boolean(!this.destroyed && showWholeItem && (!this.renderProxy || active || detailVisibility > 0.04));
+    const proxyVisibility = this.renderProxy && showWholeItem && !active
+      ? proxyDistanceVisibility * wholeItemVisibility
+      : 0;
+    const proxyBlendItems = proxyVisibility > 0.025 && useDetailedModel ? 1 : 0;
+    const fadedProxyItems = proxyVisibility > 0.025 && proxyVisibility < 0.98 ? 1 : 0;
 
-    this.setDetailedActive(useDetailedModel);
-    this.setProxyVisible(showWholeItem && !useDetailedModel);
+    // Detailed meshes and proxy instances intentionally overlap through this band.
+    // That makes Low/Auto modes degrade as distance haze instead of a hard pop.
+    this.setDetailedActive(useDetailedModel, false);
+    this.setProxyVisibility(proxyVisibility);
 
     if (!this.model.visible || !useDetailedModel) {
       return {
         visibleItems: showWholeItem && !this.destroyed ? 1 : 0,
-        visibleParts: this.renderProxy && showWholeItem && !this.destroyed ? Math.min(2, this.parts.length) : 0,
+        visibleParts: proxyVisibility > 0.025 && !this.destroyed ? Math.min(2, this.parts.length) : 0,
         totalParts: this.parts.length,
+        proxyBlendItems,
+        fadedProxyItems,
       };
     }
 
@@ -962,6 +1025,8 @@ class Destructible {
       visibleItems: this.group.visible ? 1 : 0,
       visibleParts,
       totalParts: this.parts.length,
+      proxyBlendItems,
+      fadedProxyItems,
     };
   }
 }
@@ -1213,6 +1278,8 @@ export class Town {
       stats.visibleItems += itemStats.visibleItems;
       stats.visibleParts += itemStats.visibleParts;
       stats.totalParts += itemStats.totalParts;
+      stats.proxyBlendItems += itemStats.proxyBlendItems ?? 0;
+      stats.fadedProxyItems += itemStats.fadedProxyItems ?? 0;
       if (item.isDetailedActive) {
         stats.detailedItems += 1;
       }

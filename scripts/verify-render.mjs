@@ -200,6 +200,13 @@ try {
       errors.push(`${viewport.name}: instanced town proxy diagnostics were not active (${JSON.stringify(upgradedDiagnostics)})`);
     }
 
+    if (
+      typeof upgradedDiagnostics.proxyBlendTownItems !== 'number'
+      || typeof upgradedDiagnostics.fadedProxyTownItems !== 'number'
+    ) {
+      errors.push(`${viewport.name}: town LOD blend diagnostics were missing (${JSON.stringify(upgradedDiagnostics)})`);
+    }
+
     if (upgradedDiagnostics.simulatedItems <= 0 || upgradedDiagnostics.simulatedItems >= upgradedDiagnostics.totalItems) {
       errors.push(`${viewport.name}: spatial simulation culling was not active (${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems})`);
     }
@@ -273,6 +280,7 @@ try {
       !debugOverlay.text.includes('Performance')
       || !debugOverlay.text.includes('Particles')
       || !debugOverlay.text.includes('Proxy Items')
+      || !debugOverlay.text.includes('LOD Blend / Fade')
       || !debugOverlay.text.includes('Carry / Fresh')
       || typeof debugOverlay.diagnostics.fps !== 'number'
       || typeof debugOverlay.diagnostics.hitchCount !== 'number'

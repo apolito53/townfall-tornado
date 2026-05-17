@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 
 const ZERO_SCALE = new THREE.Vector3(0, 0, 0);
+const MIN_PROXY_PHASE_SCALE = 0.08;
 
 function createProxyMaterial(color, vertexColors = false) {
   return new THREE.MeshBasicMaterial({
     color,
     fog: true,
+    toneMapped: false,
     vertexColors,
   });
 }
@@ -55,18 +57,18 @@ const BATCH_DEFINITIONS = {
 
 function colorForHouse(type, variant = 0) {
   if (type === 'Shop') {
-    return variant % 2 === 0 ? 0xbfc9d3 : 0xa15f4d;
+    return variant % 2 === 0 ? 0xc8d0d8 : 0xb37261;
   }
 
-  return variant % 2 === 0 ? 0xc9d4c8 : 0xd1b18e;
+  return variant % 2 === 0 ? 0xd4ddd1 : 0xd9bd9d;
 }
 
 function colorForRoof(variant = 0) {
   if (variant % 3 === 0) {
-    return 0x427d64;
+    return 0x5d8b72;
   }
 
-  return variant % 4 === 0 ? 0x394f4b : 0x9b4c44;
+  return variant % 4 === 0 ? 0x65746d : 0xb9665b;
 }
 
 function colorForCar(variant = 0) {
@@ -106,6 +108,7 @@ class InstanceBatch {
     const record = {
       id,
       visible: true,
+      visibilityScale: 1,
       position: position.clone(),
       rotationY,
       scale: scale.clone(),
@@ -118,20 +121,38 @@ class InstanceBatch {
   }
 
   setVisible(id, visible) {
+    this.setVisibilityScale(id, visible ? 1 : 0);
+  }
+
+  setVisibilityScale(id, amount) {
     const record = this.records[id];
-    if (!record || record.visible === visible) {
+    if (!record) {
       return;
     }
 
+    const visible = amount > 0;
+    const visibilityScale = visible ? THREE.MathUtils.lerp(MIN_PROXY_PHASE_SCALE, 1, amount) : 0;
+    if (record.visible === visible && Math.abs(record.visibilityScale - visibilityScale) < 0.001) {
+      return;
+    }
+
+    const wasVisible = record.visible;
     record.visible = visible;
-    this.visibleCount += visible ? 1 : -1;
+    record.visibilityScale = visibilityScale;
+    if (wasVisible !== visible) {
+      this.visibleCount += visible ? 1 : -1;
+    }
     this.writeRecord(record);
   }
 
   writeRecord(record) {
     this.transform.position.copy(record.position);
     this.transform.rotation.set(0, record.rotationY, 0);
-    this.transform.scale.copy(record.visible ? record.scale : ZERO_SCALE);
+    if (record.visible) {
+      this.transform.scale.copy(record.scale).multiplyScalar(record.visibilityScale);
+    } else {
+      this.transform.scale.copy(ZERO_SCALE);
+    }
     this.transform.updateMatrix();
     this.mesh.setMatrixAt(record.id, this.transform.matrix);
 
@@ -203,6 +224,7 @@ export class TownInstancing {
     this.visibleProxyCount += 1;
     return {
       visible: true,
+      visibilityAmount: 1,
       records,
     };
   }
@@ -225,7 +247,7 @@ export class TownInstancing {
         position: position.clone().add(new THREE.Vector3(0, wallHeight + roofHeight * 0.5 + 0.36, 0)),
         rotationY: rotation,
         scale: new THREE.Vector3(width + 1.1, roofHeight, depth + 0.9),
-        color: isShop ? 0x427d64 : colorForRoof(variant),
+        color: isShop ? 0x5d8b72 : colorForRoof(variant),
       }),
     ];
   }
@@ -294,14 +316,28 @@ export class TownInstancing {
   }
 
   setProxyVisible(proxy, visible) {
-    if (!proxy || proxy.visible === visible) {
+    this.setProxyVisibility(proxy, visible ? 1 : 0);
+  }
+
+  setProxyVisibility(proxy, amount = 0) {
+    if (!proxy) {
       return;
     }
 
+    const visibilityAmount = THREE.MathUtils.clamp(amount, 0, 1);
+    const visible = visibilityAmount > 0.025;
+    if (proxy.visible === visible && Math.abs((proxy.visibilityAmount ?? 0) - visibilityAmount) < 0.005) {
+      return;
+    }
+
+    const wasVisible = proxy.visible;
     proxy.visible = visible;
-    this.visibleProxyCount += visible ? 1 : -1;
+    proxy.visibilityAmount = visibilityAmount;
+    if (wasVisible !== visible) {
+      this.visibleProxyCount += visible ? 1 : -1;
+    }
     for (const record of proxy.records) {
-      record.batch.setVisible(record.id, visible);
+      record.batch.setVisibilityScale(record.id, visible ? visibilityAmount : 0);
     }
   }
 
