@@ -9,6 +9,12 @@ const viewports = [
   { name: 'mobile', width: 390, height: 844 },
 ];
 
+function withSearchParam(inputUrl, key, value) {
+  const nextUrl = new URL(inputUrl);
+  nextUrl.searchParams.set(key, value);
+  return nextUrl.toString();
+}
+
 async function launchBrowser() {
   const launchAttempts = [
     { channel: 'msedge' },
@@ -87,7 +93,11 @@ try {
       localStorage.removeItem('townfall.qualityCustom');
     });
 
-    await page.goto(url, { waitUntil: 'networkidle' });
+    const expectsMobileControls = viewport.name === 'mobile';
+    const pageUrl = expectsMobileControls
+      ? withSearchParam(url, 'mobileControls', '1')
+      : withSearchParam(url, 'noMobileControls', '1');
+    await page.goto(pageUrl, { waitUntil: 'networkidle' });
     await page.waitForFunction(() => window.__townfallDiagnostics?.renderOk === true, undefined, {
       timeout: 10000,
     });
@@ -97,6 +107,20 @@ try {
       errors.push(`${viewport.name}: start screen was not visible before choosing a mode`);
     }
 
+    const startInputState = await page.evaluate(() => ({
+      enabled: window.__townfallDiagnostics?.mobileControlsEnabled,
+      hidden: document.querySelector('#mobile-joystick')?.hidden,
+      appClass: document.querySelector('#app')?.classList.contains('has-mobile-controls'),
+    }));
+
+    if (expectsMobileControls) {
+      if (!startInputState.enabled || !startInputState.hidden || !startInputState.appClass) {
+        errors.push(`${viewport.name}: mobile controls were not armed but hidden at start (${JSON.stringify(startInputState)})`);
+      }
+    } else if (startInputState.enabled || !startInputState.hidden || startInputState.appClass) {
+      errors.push(`${viewport.name}: desktop unexpectedly enabled mobile controls (${JSON.stringify(startInputState)})`);
+    }
+
     await page.getByRole('button', { name: /Levels/i }).click();
     await page.waitForFunction(
       () => window.__townfallDiagnostics?.gameMode === 'levels'
@@ -104,6 +128,18 @@ try {
       undefined,
       { timeout: 5000 },
     );
+    const playInputState = await page.evaluate(() => ({
+      enabled: window.__townfallDiagnostics?.mobileControlsEnabled,
+      hidden: document.querySelector('#mobile-joystick')?.hidden,
+      inputMode: window.__townfallDiagnostics?.inputMode,
+    }));
+    if (expectsMobileControls) {
+      if (!playInputState.enabled || playInputState.hidden || playInputState.inputMode !== 'mobile-idle') {
+        errors.push(`${viewport.name}: mobile joystick was not visible during play (${JSON.stringify(playInputState)})`);
+      }
+    } else if (playInputState.enabled || !playInputState.hidden) {
+      errors.push(`${viewport.name}: desktop mobile joystick was visible during play (${JSON.stringify(playInputState)})`);
+    }
 
     const beforeMove = await page.evaluate(() => window.__townfallDiagnostics);
     await page.keyboard.down('KeyD');
@@ -114,6 +150,33 @@ try {
       beforeMove.tornadoX,
       { timeout: 5000 },
     );
+
+    if (expectsMobileControls) {
+      const joystickBounds = await page.locator('#mobile-joystick').boundingBox();
+      const beforeJoystickMove = await page.evaluate(() => window.__townfallDiagnostics.tornadoX);
+      await page.mouse.move(
+        joystickBounds.x + joystickBounds.width * 0.5,
+        joystickBounds.y + joystickBounds.height * 0.5,
+      );
+      await page.mouse.down();
+      await page.mouse.move(
+        joystickBounds.x + joystickBounds.width * 0.88,
+        joystickBounds.y + joystickBounds.height * 0.5,
+      );
+      await page.waitForFunction(
+        () => window.__townfallDiagnostics?.mobileJoystickActive === true
+          && window.__townfallDiagnostics?.inputMode === 'mobile-joystick',
+        undefined,
+        { timeout: 3000 },
+      );
+      await page.waitForTimeout(500);
+      await page.mouse.up();
+      await page.waitForFunction(
+        (beforeX) => window.__townfallDiagnostics?.tornadoX > beforeX + 0.5,
+        beforeJoystickMove,
+        { timeout: 5000 },
+      );
+    }
 
     const scaleProbe = await page.evaluate(() => {
       const game = window.__townfallGame;
@@ -281,6 +344,7 @@ try {
       || !debugOverlay.text.includes('Particles')
       || !debugOverlay.text.includes('Proxy Items')
       || !debugOverlay.text.includes('LOD Blend / Fade')
+      || !debugOverlay.text.includes('Input')
       || !debugOverlay.text.includes('Carry / Fresh')
       || typeof debugOverlay.diagnostics.fps !== 'number'
       || typeof debugOverlay.diagnostics.hitchCount !== 'number'
@@ -515,7 +579,7 @@ try {
       errors.push(`${viewport.name}: console errors: ${consoleErrors.join(' | ')}`);
     }
 
-    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, chunks ${upgradedDiagnostics.generatedChunks}, simulated ${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems}, detailed town ${upgradedDiagnostics.detailedTownItems}, proxies ${upgradedDiagnostics.visibleInstancedTownProxies}/${upgradedDiagnostics.instancedTownProxies}, effects ${upgradedDiagnostics.effectPieces}, particles ${stressDiagnostics.activeParticles}/${stressDiagnostics.particleCapacity}, instanced chunks ${stressDiagnostics.activeInstancedChunks}/${stressDiagnostics.instancedDebrisCapacity}, visible parts ${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts}, draw calls ${upgradedDiagnostics.drawCalls}, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
+    console.log(`${viewport.name}: render ok, ${samples.visible}/${samples.total} sampled pixels, chunks ${upgradedDiagnostics.generatedChunks}, simulated ${upgradedDiagnostics.simulatedItems}/${upgradedDiagnostics.totalItems}, detailed town ${upgradedDiagnostics.detailedTownItems}, proxies ${upgradedDiagnostics.visibleInstancedTownProxies}/${upgradedDiagnostics.instancedTownProxies}, effects ${upgradedDiagnostics.effectPieces}, particles ${stressDiagnostics.activeParticles}/${stressDiagnostics.particleCapacity}, instanced chunks ${stressDiagnostics.activeInstancedChunks}/${stressDiagnostics.instancedDebrisCapacity}, visible parts ${upgradedDiagnostics.visibleParts}/${upgradedDiagnostics.totalParts}, draw calls ${upgradedDiagnostics.drawCalls}, moved from x=${beforeMove.tornadoX} to x=${samples.diagnostics.tornadoX}, input ${upgradedDiagnostics.inputMode}/${upgradedDiagnostics.mobileControlsEnabled ? 'stick' : 'desktop'}, radius ${scaleProbe.initialRadius.toFixed(1)} -> ${scaleProbe.upgradedRadius.toFixed(1)} at Cat ${scaleProbe.upgradedCategory} mass ${scaleProbe.probeMass}, camera scale ${upgradedDiagnostics.cameraZoomScale}, shader ${upgradedDiagnostics.stormShaderIntensity}, ${levelUi.levelLabel}`);
     await page.close();
   }
 } finally {

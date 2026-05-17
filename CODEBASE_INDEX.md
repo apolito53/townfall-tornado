@@ -20,7 +20,7 @@
 - `src/townInstancing.ts` owns the instanced far-town proxy renderer for simple house/shop LODs, trees, fences, cars, and road stripes, including proxy visibility scaling used by distance phase-in.
 - `src/tornado.ts` owns tornado growth stats, category thresholds, dramatic diameter scaling, taller wiggly sky-connected funnel visuals, procedural smoky funnel/storm-sky textures, wall cloud curtains, dust, and airborne debris.
 - `src/town.ts` owns terrain, roads, a large low-cost base ground plane, more detailed low-poly building models, destructible town props, staged structural damage, pressure bursts, rotating per-frame simulation budgets, frame-budgeted debris particle/chunk emissions, persistent capped ground scars, continuous 5x5 procedural town chunk loading around the tornado, spatial buckets for nearby destructible simulation, quality-scaled full-model promotion near storm interaction, phase-blended distance render LOD, lift thresholds, suction response, and destroyed ratio.
-- `src/input.ts` translates keyboard and pointer/touch steering into a normalized movement vector.
+- `src/input.ts` translates keyboard, desktop pointer-drag, and mobile on-screen joystick steering into a normalized movement vector. Add `?mobileControls` or `?noMobileControls` locally to force a control mode during browser testing.
 - `src/ui.ts` updates the level tracker, HUD, growth bar, timer, and short storm messages.
 - `src/globals.d.ts` declares local browser diagnostics hooks used by the smoke tests.
 - `scripts/debug-log-server.mjs` runs the optional `127.0.0.1:5176` JSONL log receiver and exposes `/health`, `/log`, and `/recent` for live debugging.
@@ -34,8 +34,8 @@
 - Change levels, category-scaled score/damage targets, queued absorption pacing, timer, combo, pause behavior, quality presets/manual sliders, camera angle/zoom/fog composition, post-processing setup, scene debris caps, minimum level duration, or diagnostics in `src/game.ts`.
 - Tune visual debris capacity, shader motion, particle colors, and instanced chunk behavior in `src/debrisParticles.ts`.
 - Tune screen-space storm realism in `src/stormAtmosphereShader.ts`: color grade, haze, rain streaks, vignette, grain, and lightning response.
-- Change visual layout and responsive HUD behavior in `src/styles.css`.
-- Level tracker, quality controls, pause menu, and hidden diagnostics root markup live in `index.html`, with compact HUD, level tracker, quality controls, pause overlay, and debug overlay styling in `src/styles.css`.
+- Change visual layout, responsive HUD behavior, and mobile joystick placement in `src/styles.css`.
+- Level tracker, quality controls, mobile joystick, pause menu, and hidden diagnostics root markup live in `index.html`, with compact HUD, level tracker, quality controls, mobile controls, pause overlay, and debug overlay styling in `src/styles.css`.
 
 ## Validation Commands
 
@@ -53,6 +53,7 @@ $env:TOWNFALL_URL='http://127.0.0.1:5175/'; npm.cmd run verify:render
 - Automated tests sample WebGL pixels from the main canvas, so `preserveDrawingBuffer` is enabled in `src/game.ts`; normal in-game diagnostics avoid recurring `readPixels` stalls.
 - `src/main.ts` exposes `window.__townfallGame` for local browser tuning and automated scaling checks.
 - Press `F3` or add `?debug` to the local URL to show the diagnostics overlay; it reuses `#diagnostics` while preserving the dataset fields used by smoke tests.
+- Mobile controls are auto-enabled from user-agent/touch/coarse-pointer signals, with `?mobileControls` and `?noMobileControls` overrides for local verification.
 - Run `npm.cmd run debug:logs` beside the Vite server, then open the app with `?debugLogs`, to capture browser-side warnings/errors, uncaught errors, frame hitches, and town simulation pressure events as JSONL on port `5176`.
 - Category mass targets are shared from `src/categoryProgression.ts`; keep the HUD and `src/tornado.ts` using that source instead of duplicating thresholds. Current gates are intentionally steep: Cat 2 at 55, Cat 3 at 250, Cat 4 at 943, Cat 5 at 3404.
 - The game renders through `EffectComposer`; resize, manually reset renderer info, on-change shadow refreshes, and shader diagnostics are wired from `src/game.ts`.

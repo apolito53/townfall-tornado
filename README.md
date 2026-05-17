@@ -34,7 +34,8 @@ This Vite project has a dedicated strict port assignment so it can run beside th
 ## Controls
 
 - `WASD` or arrow keys move the tornado.
-- Pointer/touch drag steers from the screen center.
+- Pointer drag steers from the screen center on desktop/non-mobile browsers.
+- Mobile/coarse-pointer devices use an on-screen joystick instead of canvas-wide touch steering.
 - `Pause` opens the storm control menu.
 - The start and pause menus include `Auto`, `Low`, `Medium`, and `High` quality presets plus manual sliders for render scale, effects density, town detail distance, and storm FX. `Auto` uses browser/WebGL hints to avoid punishing machines that are running through software rendering or weak integrated/mobile GPUs.
 - The pause menu contains `Resume`, `Restart`, and a perspective slider for low-to-high camera angle.

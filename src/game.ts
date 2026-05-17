@@ -244,6 +244,7 @@ export class Game {
     this.qualitySliders = [...document.querySelectorAll('[data-quality-slider]')];
     this.qualityToggles = [...document.querySelectorAll('[data-quality-toggle]')];
     this.qualitySummaries = [...document.querySelectorAll('[data-quality-summary]')];
+    this.mobileJoystickElement = document.querySelector('#mobile-joystick');
     this.canvas = canvas;
     this.diagnosticsElement = diagnosticsElement;
     this.pixelDiagnosticsEnabled = new URLSearchParams(window.location.search).has('pixelDiagnostics');
@@ -283,7 +284,11 @@ export class Game {
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.setupPostProcessing();
 
-    this.input = new InputController(canvas);
+    this.input = new InputController(canvas, {
+      joystickElement: this.mobileJoystickElement,
+    });
+    this.mobileControlsEnabled = this.input.usesMobileControls();
+    this.appElement?.classList.toggle('has-mobile-controls', this.mobileControlsEnabled);
     this.hud = new Hud();
     this.tornado = new Tornado(this.scene);
     this.debrisParticles = new DebrisParticles(this.scene);
@@ -680,6 +685,8 @@ export class Game {
 
   syncGameShell() {
     this.appElement?.classList.toggle('is-starting', this.isAwaitingStart);
+    this.appElement?.classList.toggle('is-paused', this.isPaused);
+    this.input?.setMobileControlsVisible(this.mobileControlsEnabled && !this.isAwaitingStart && !this.isPaused);
 
     if (this.startScreenElement) {
       this.startScreenElement.hidden = !this.isAwaitingStart;
@@ -1201,6 +1208,10 @@ export class Game {
       qualityPlatformTier: this.platformQuality.tier,
       qualityPlatformRenderer: this.platformQuality.renderer,
       qualityPlatformReason: this.platformQuality.reasons[0] ?? '',
+      mobileDetected: Boolean(this.platformQuality.isMobile),
+      mobileControlsEnabled: Boolean(this.mobileControlsEnabled),
+      mobileJoystickActive: Boolean(this.input?.isJoystickActive?.()),
+      inputMode: this.input?.getInputMode?.() ?? 'unknown',
       shadowsEnabled: this.renderer.shadowMap.enabled,
       cameraZoomScale: Number((this.cameraOffset.z / BASE_CAMERA_OFFSET.z).toFixed(3)),
       cameraFov: Number(this.camera.fov.toFixed(2)),
@@ -1309,6 +1320,10 @@ export class Game {
       qualityPlatformTier: diagnostics.qualityPlatformTier,
       qualityPlatformRenderer: diagnostics.qualityPlatformRenderer,
       qualityPlatformReason: diagnostics.qualityPlatformReason,
+      mobileDetected: String(diagnostics.mobileDetected),
+      mobileControlsEnabled: String(diagnostics.mobileControlsEnabled),
+      mobileJoystickActive: String(diagnostics.mobileJoystickActive),
+      inputMode: diagnostics.inputMode,
       shadowsEnabled: String(diagnostics.shadowsEnabled),
       cameraZoomScale: String(diagnostics.cameraZoomScale),
       cameraFov: String(diagnostics.cameraFov),
@@ -1439,6 +1454,11 @@ export class Game {
         ['Simulated / Candidates', `${formatDebugNumber(diagnostics.simulatedItems)} / ${formatDebugNumber(diagnostics.candidateItems)}`],
         ['Carry / Fresh', `${formatDebugNumber(diagnostics.activeCarryoverItems)} / ${formatDebugNumber(diagnostics.freshCandidateItems)}`],
         ['Active / Throttled', `${formatDebugNumber(diagnostics.activeItems)} / ${formatDebugNumber(diagnostics.throttledCandidates)}`],
+      ])}
+      ${this.renderDebugSection('Input', [
+        ['Mode', diagnostics.inputMode],
+        ['Mobile / Stick', `${diagnostics.mobileDetected ? 'yes' : 'no'} / ${diagnostics.mobileControlsEnabled ? 'on' : 'off'}`],
+        ['Joystick', diagnostics.mobileJoystickActive ? 'active' : 'idle'],
       ])}
       ${this.renderDebugSection('Effects', [
         ['Particles', `${formatDebugNumber(diagnostics.activeParticles)} / ${formatDebugNumber(diagnostics.particleCapacity)}`],
