@@ -257,7 +257,27 @@ try {
       const roadClearance = 8.4;
       const parkingLaneOffset = 4.15;
       const intersectionClearance = 9.5;
-      const terrainProfiles = [...game.town.terrainProfiles.values()].map((profile) => profile.type);
+      const terrainEntries = [...game.town.terrainProfiles.entries()];
+      const terrainProfiles = terrainEntries.map(([, profile]) => profile.type);
+      const terrainHeightRanges = terrainEntries.map(([key, profile]) => {
+        const [chunkX, chunkZ] = key.split(',').map(Number);
+        const terrainSize = profile.size ?? chunkSize;
+        const sampleLimit = Math.min(terrainSize * 0.38, 48);
+        const sampleOffsets = [-sampleLimit, -sampleLimit * 0.55, sampleLimit * 0.55, sampleLimit];
+        const heights = [];
+
+        for (const localX of sampleOffsets) {
+          for (const localZ of sampleOffsets) {
+            heights.push(game.town.getTerrainHeightAt(chunkX * chunkSize + localX, chunkZ * chunkSize + localZ));
+          }
+        }
+
+        return {
+          key,
+          type: profile.type,
+          range: Math.max(...heights) - Math.min(...heights),
+        };
+      });
       const badProps = [];
       const badCars = [];
 
@@ -292,6 +312,10 @@ try {
       return {
         terrainProfileCount: terrainProfiles.length,
         terrainTypes: [...new Set(terrainProfiles)],
+        terrainHeightRange: Math.max(...terrainHeightRanges.map((entry) => entry.range)),
+        heightRanges: terrainHeightRanges
+          .sort((a, b) => b.range - a.range)
+          .slice(0, 4),
         badProps: badProps.slice(0, 5),
         badCars: badCars.slice(0, 5),
       };
@@ -299,6 +323,10 @@ try {
 
     if (placementProbe.terrainProfileCount < upgradedDiagnostics.generatedChunks - 1 || placementProbe.terrainTypes.length < 2) {
       errors.push(`${viewport.name}: terrain profile generation did not produce varied chunk terrain (${JSON.stringify(placementProbe)})`);
+    }
+
+    if (placementProbe.terrainHeightRange < 0.45) {
+      errors.push(`${viewport.name}: terrain height variation was too subtle (${JSON.stringify(placementProbe)})`);
     }
 
     if (placementProbe.badProps.length > 0 || placementProbe.badCars.length > 0) {

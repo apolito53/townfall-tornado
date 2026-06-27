@@ -5,6 +5,8 @@ const BUILDABLE_COORDS = [-34, -22, -10, 10, 22, 34];
 const ROAD_COORDS = [-4, 4];
 const TOWN_BOUNDARY = 50;
 const CHUNK_SIZE = 72;
+const CENTER_TERRAIN_SIZE = 130;
+const TERRAIN_SEGMENTS = 24;
 const WORLD_GROUND_SIZE = 6000;
 const INITIAL_CHUNK_RADIUS = 2;
 const EDGE_GENERATION_RADIUS = 2;
@@ -29,10 +31,10 @@ const MAX_TOWN_ITEMS_UPDATED_PER_FRAME = 560;
 const MAX_ACTIVE_CARRYOVER_SHARE = 0.45;
 
 const MATERIALS = {
-  grass: new THREE.MeshStandardMaterial({ color: 0x5c8f5c, roughness: 0.95 }),
-  grassDry: new THREE.MeshStandardMaterial({ color: 0x748658, roughness: 0.96 }),
-  fieldGrass: new THREE.MeshStandardMaterial({ color: 0x6f8f4f, roughness: 0.98 }),
-  cityGround: new THREE.MeshStandardMaterial({ color: 0x667063, roughness: 0.94 }),
+  grass: new THREE.MeshStandardMaterial({ color: 0x55965a, roughness: 0.95, flatShading: true }),
+  grassDry: new THREE.MeshStandardMaterial({ color: 0x93865a, roughness: 0.96, flatShading: true }),
+  fieldGrass: new THREE.MeshStandardMaterial({ color: 0x78a34f, roughness: 0.98, flatShading: true }),
+  cityGround: new THREE.MeshStandardMaterial({ color: 0x59625d, roughness: 0.94, flatShading: true }),
   road: new THREE.MeshStandardMaterial({ color: 0x4b4943, roughness: 0.98 }),
   roadStripe: new THREE.MeshStandardMaterial({ color: 0xe9d878, roughness: 0.85 }),
   sidewalk: new THREE.MeshStandardMaterial({ color: 0xc3bba6, roughness: 0.9 }),
@@ -197,12 +199,13 @@ function createTerrainProfile(chunkX, chunkZ, levelIndex) {
     return {
       type: 'city',
       material: MATERIALS.cityGround,
-      amplitude: 0.025,
+      amplitude: 0.48,
       carCount: 10,
       treeCount: 4,
       fenceCount: 3,
       officeChance: 0.42,
       shopChance: 0.36,
+      size: CHUNK_SIZE,
       seed: random() * 1000,
     };
   }
@@ -211,12 +214,13 @@ function createTerrainProfile(chunkX, chunkZ, levelIndex) {
     return {
       type: 'field',
       material: MATERIALS.fieldGrass,
-      amplitude: 0.13,
+      amplitude: 2.0,
       carCount: 4,
       treeCount: 12,
       fenceCount: 9,
       officeChance: 0,
       shopChance: 0.08,
+      size: CHUNK_SIZE,
       seed: random() * 1000,
     };
   }
@@ -225,12 +229,13 @@ function createTerrainProfile(chunkX, chunkZ, levelIndex) {
     return {
       type: 'dry',
       material: MATERIALS.grassDry,
-      amplitude: 0.09,
+      amplitude: 1.55,
       carCount: 6,
       treeCount: 8,
       fenceCount: 8,
       officeChance: 0.03,
       shopChance: 0.16,
+      size: CHUNK_SIZE,
       seed: random() * 1000,
     };
   }
@@ -238,13 +243,26 @@ function createTerrainProfile(chunkX, chunkZ, levelIndex) {
   return {
     type: 'suburban',
     material: MATERIALS.grass,
-    amplitude: 0.065,
+    amplitude: 1.2,
     carCount: 7,
     treeCount: 10,
     fenceCount: 7,
     officeChance: levelIndex >= 4 ? 0.08 : 0,
     shopChance: 0.2,
+    size: CHUNK_SIZE,
     seed: random() * 1000,
+  };
+}
+
+function createCenterTerrainProfile(levelIndex) {
+  const baseProfile = createTerrainProfile(0, 0, levelIndex);
+
+  return {
+    ...baseProfile,
+    type: 'suburban',
+    material: MATERIALS.grass,
+    amplitude: Math.max(1.35, baseProfile.amplitude),
+    size: CENTER_TERRAIN_SIZE,
   };
 }
 
@@ -253,30 +271,54 @@ function sampleTerrainHeight(profile, localX, localZ) {
     return 0;
   }
 
+  const terrainSize = profile.size ?? CHUNK_SIZE;
   const roadDistance = Math.min(Math.abs(localX), Math.abs(localZ));
-  const roadBlend = THREE.MathUtils.smoothstep(roadDistance, CHUNK_ROAD_CLEARANCE, CHUNK_ROAD_CLEARANCE + 9);
-  const edgeDistance = CHUNK_SIZE * 0.5 - Math.max(Math.abs(localX), Math.abs(localZ));
-  const edgeBlend = THREE.MathUtils.smoothstep(edgeDistance, 0, 8);
-  const waveA = Math.sin((localX + profile.seed) * 0.095) * Math.cos((localZ - profile.seed) * 0.072);
-  const waveB = Math.sin(localX * 0.043 + localZ * 0.061 + profile.seed * 0.31);
-  const height = profile.amplitude * (waveA * 0.66 + waveB * 0.34) * roadBlend * edgeBlend;
+  const roadBlend = THREE.MathUtils.smoothstep(roadDistance, CHUNK_ROAD_CLEARANCE + 1.5, CHUNK_ROAD_CLEARANCE + 17);
+  const edgeDistance = terrainSize * 0.5 - Math.max(Math.abs(localX), Math.abs(localZ));
+  const edgeBlend = THREE.MathUtils.smoothstep(edgeDistance, 0, 12);
+  const broadWave = Math.sin((localX + profile.seed) * 0.052) * Math.cos((localZ - profile.seed) * 0.045);
+  const rollingWave = Math.sin(localX * 0.085 + localZ * 0.058 + profile.seed * 0.31);
+  const ridgeWave = Math.cos((localX - localZ) * 0.038 + profile.seed * 0.17);
+  const height = profile.amplitude * (broadWave * 0.52 + rollingWave * 0.3 + ridgeWave * 0.18) * roadBlend * edgeBlend;
 
-  return THREE.MathUtils.clamp(height, -0.12, 0.16);
+  return THREE.MathUtils.clamp(height, -1.7, 2.25);
 }
 
 function createTerrainGeometry(size, profile) {
-  const geometry = new THREE.PlaneGeometry(size, size, 12, 12);
+  const geometry = new THREE.PlaneGeometry(size, size, TERRAIN_SEGMENTS, TERRAIN_SEGMENTS);
   const positions = geometry.attributes.position;
+  const colors = [];
+  const baseColor = new THREE.Color(profile?.material?.color?.getHex?.() ?? 0x5c8f5c);
 
   for (let index = 0; index < positions.count; index += 1) {
     const localX = positions.getX(index);
     const localZ = positions.getY(index);
-    positions.setZ(index, sampleTerrainHeight(profile, localX, localZ));
+    const height = sampleTerrainHeight(profile, localX, localZ);
+    const heightT = THREE.MathUtils.smoothstep(height, -1.55, 2.05);
+    const shade = 0.5 + heightT * 0.78;
+    const color = baseColor.clone().multiplyScalar(shade);
+    if (heightT < 0.32) {
+      color.lerp(new THREE.Color(0x314d39), (0.32 - heightT) * 0.8);
+    } else if (heightT > 0.68) {
+      color.lerp(new THREE.Color(0xc4bd7c), (heightT - 0.68) * 0.55);
+    }
+
+    positions.setZ(index, height);
+    colors.push(color.r, color.g, color.b);
   }
 
   positions.needsUpdate = true;
+  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
   return geometry;
+}
+
+function createTerrainMaterial(profile) {
+  const material = (profile?.material ?? MATERIALS.grass).clone();
+  material.color.set(0xffffff);
+  material.vertexColors = true;
+  material.flatShading = true;
+  return material;
 }
 
 function isNearChunkRoad(localX, localZ, radius, clearance = CHUNK_ROAD_CLEARANCE) {
@@ -1493,12 +1535,18 @@ export class Town {
 
   createTerrain() {
     const worldGround = new THREE.Mesh(new THREE.PlaneGeometry(WORLD_GROUND_SIZE, WORLD_GROUND_SIZE), MATERIALS.grass);
-    worldGround.position.y = -0.04;
+    worldGround.position.y = -1.95;
     worldGround.rotation.x = -Math.PI * 0.5;
     worldGround.receiveShadow = false;
     this.group.add(worldGround);
 
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(130, 130), MATERIALS.grass);
+    const centerTerrainProfile = createCenterTerrainProfile(this.levelIndex);
+    this.terrainProfiles.set(chunkKey(0, 0), centerTerrainProfile);
+
+    const ground = new THREE.Mesh(
+      createTerrainGeometry(CENTER_TERRAIN_SIZE, centerTerrainProfile),
+      createTerrainMaterial(centerTerrainProfile),
+    );
     ground.rotation.x = -Math.PI * 0.5;
     ground.receiveShadow = true;
     this.group.add(ground);
@@ -1536,7 +1584,7 @@ export class Town {
   }
 
   createTerrainPatch(originX, originZ, terrainProfile) {
-    const ground = new THREE.Mesh(createTerrainGeometry(CHUNK_SIZE + 1, terrainProfile), terrainProfile.material);
+    const ground = new THREE.Mesh(createTerrainGeometry(CHUNK_SIZE + 1, terrainProfile), createTerrainMaterial(terrainProfile));
     ground.position.set(originX, -0.012, originZ);
     ground.rotation.x = -Math.PI * 0.5;
     ground.receiveShadow = true;
