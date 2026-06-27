@@ -56,6 +56,10 @@ const BATCH_DEFINITIONS = {
 };
 
 function colorForHouse(type, variant = 0) {
+  if (type === 'Office') {
+    return variant % 2 === 0 ? 0xaeb8b8 : 0xa66b5e;
+  }
+
   if (type === 'Shop') {
     return variant % 2 === 0 ? 0xc8d0d8 : 0xb37261;
   }
@@ -205,7 +209,7 @@ export class TownInstancing {
     const variant = config.variant ?? 0;
     let records = [];
 
-    if (config.type === 'House' || config.type === 'Shop') {
+    if (config.type === 'House' || config.type === 'Shop' || config.type === 'Office') {
       records = this.addBuildingProxy(config, position, rotation, variant);
     } else if (config.type === 'Tree') {
       records = this.addTreeProxy(position, rotation);
@@ -231,10 +235,11 @@ export class TownInstancing {
 
   addBuildingProxy(config, position, rotation, variant) {
     const isShop = config.type === 'Shop';
-    const width = isShop ? 8.8 : 5.9;
-    const depth = isShop ? 6.7 : 5.3;
-    const wallHeight = isShop ? 4.0 : 3.2;
-    const roofHeight = isShop ? 0.62 : 0.82;
+    const isOffice = config.type === 'Office';
+    const width = config.proxySize?.width ?? (isShop ? 8.8 : 5.9);
+    const depth = config.proxySize?.depth ?? (isShop ? 6.7 : 5.3);
+    const wallHeight = config.proxySize?.wallHeight ?? (isShop ? 4.0 : 3.2);
+    const roofHeight = config.proxySize?.roofHeight ?? (isShop ? 0.62 : 0.82);
 
     return [
       this.batches.houseBody.add({
@@ -247,7 +252,7 @@ export class TownInstancing {
         position: position.clone().add(new THREE.Vector3(0, wallHeight + roofHeight * 0.5 + 0.36, 0)),
         rotationY: rotation,
         scale: new THREE.Vector3(width + 1.1, roofHeight, depth + 0.9),
-        color: isShop ? 0x5d8b72 : colorForRoof(variant),
+        color: isOffice ? 0x56625f : (isShop ? 0x5d8b72 : colorForRoof(variant)),
       }),
     ];
   }

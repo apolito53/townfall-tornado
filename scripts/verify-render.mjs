@@ -2,7 +2,7 @@ import { chromium } from '@playwright/test';
 import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-const url = process.env.TOWNFALL_URL ?? process.argv[2] ?? 'http://127.0.0.1:5173/';
+const url = process.env.TOWNFALL_URL ?? process.argv[2] ?? 'http://127.0.0.1:5175/';
 const artifactDir = resolve('artifacts');
 const viewports = [
   { name: 'desktop', width: 1280, height: 800 },
@@ -249,6 +249,60 @@ try {
 
     if (!corridorProbe.generatedDogleg || !corridorProbe.hasDoglegCenter) {
       errors.push(`${viewport.name}: town chunks did not fill a dogleg path through expanded bounds (${JSON.stringify(corridorProbe)})`);
+    }
+
+    const placementProbe = await page.evaluate(() => {
+      const game = window.__townfallGame;
+      const chunkSize = 72;
+      const roadClearance = 8.4;
+      const parkingLaneOffset = 4.15;
+      const intersectionClearance = 9.5;
+      const terrainProfiles = [...game.town.terrainProfiles.values()].map((profile) => profile.type);
+      const badProps = [];
+      const badCars = [];
+
+      for (const item of game.town.items) {
+        if (item.source !== 'procedural') {
+          continue;
+        }
+
+        const chunkX = Math.round(item.basePosition.x / chunkSize);
+        const chunkZ = Math.round(item.basePosition.z / chunkSize);
+        const localX = item.basePosition.x - chunkX * chunkSize;
+        const localZ = item.basePosition.z - chunkZ * chunkSize;
+        const insideCenterReserve = Math.abs(item.basePosition.x) <= 50 + item.radius
+          && Math.abs(item.basePosition.z) <= 50 + item.radius;
+        const nearRoad = Math.abs(localX) < roadClearance + item.radius
+          || Math.abs(localZ) < roadClearance + item.radius;
+
+        if ((item.type === 'Tree' || item.type === 'Fence') && (nearRoad || insideCenterReserve)) {
+          badProps.push({ type: item.type, x: item.basePosition.x, z: item.basePosition.z, localX, localZ });
+        }
+
+        if (item.type === 'Car') {
+          const onParkingShoulder = Math.abs(Math.abs(localX) - parkingLaneOffset) < 0.95
+            || Math.abs(Math.abs(localZ) - parkingLaneOffset) < 0.95;
+          const clearOfIntersection = Math.max(Math.abs(localX), Math.abs(localZ)) > intersectionClearance;
+          if (!onParkingShoulder || !clearOfIntersection || insideCenterReserve) {
+            badCars.push({ x: item.basePosition.x, z: item.basePosition.z, localX, localZ });
+          }
+        }
+      }
+
+      return {
+        terrainProfileCount: terrainProfiles.length,
+        terrainTypes: [...new Set(terrainProfiles)],
+        badProps: badProps.slice(0, 5),
+        badCars: badCars.slice(0, 5),
+      };
+    });
+
+    if (placementProbe.terrainProfileCount < upgradedDiagnostics.generatedChunks - 1 || placementProbe.terrainTypes.length < 2) {
+      errors.push(`${viewport.name}: terrain profile generation did not produce varied chunk terrain (${JSON.stringify(placementProbe)})`);
+    }
+
+    if (placementProbe.badProps.length > 0 || placementProbe.badCars.length > 0) {
+      errors.push(`${viewport.name}: procedural placement validation found bad props/cars (${JSON.stringify(placementProbe)})`);
     }
 
     if (upgradedDiagnostics.totalItems <= 0) {

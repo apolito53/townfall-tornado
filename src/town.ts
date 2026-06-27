@@ -8,6 +8,10 @@ const CHUNK_SIZE = 72;
 const WORLD_GROUND_SIZE = 6000;
 const INITIAL_CHUNK_RADIUS = 2;
 const EDGE_GENERATION_RADIUS = 2;
+const CHUNK_EDGE_PLACEMENT_LIMIT = CHUNK_SIZE * 0.46;
+const CHUNK_ROAD_CLEARANCE = 8.4;
+const PARKING_LANE_OFFSET = 4.15;
+const INTERSECTION_CLEARANCE = 9.5;
 const SIMULATION_CELL_SIZE = 24;
 const MAX_INTERACTION_RADIUS = 12;
 const DETAIL_LOD_RADIUS_BY_CATEGORY = [64, 76, 88, 100, 116];
@@ -26,6 +30,9 @@ const MAX_ACTIVE_CARRYOVER_SHARE = 0.45;
 
 const MATERIALS = {
   grass: new THREE.MeshStandardMaterial({ color: 0x5c8f5c, roughness: 0.95 }),
+  grassDry: new THREE.MeshStandardMaterial({ color: 0x748658, roughness: 0.96 }),
+  fieldGrass: new THREE.MeshStandardMaterial({ color: 0x6f8f4f, roughness: 0.98 }),
+  cityGround: new THREE.MeshStandardMaterial({ color: 0x667063, roughness: 0.94 }),
   road: new THREE.MeshStandardMaterial({ color: 0x4b4943, roughness: 0.98 }),
   roadStripe: new THREE.MeshStandardMaterial({ color: 0xe9d878, roughness: 0.85 }),
   sidewalk: new THREE.MeshStandardMaterial({ color: 0xc3bba6, roughness: 0.9 }),
@@ -177,6 +184,152 @@ function mulberry32(seed) {
   };
 }
 
+function createTerrainProfile(chunkX, chunkZ, levelIndex) {
+  // Terrain gets its own salted random stream so visual variation never reshuffles lots.
+  const random = mulberry32(hashChunk(chunkX + 811 + levelIndex * 37, chunkZ - 613 - levelIndex * 41));
+  const roll = random();
+  const distanceFromCenter = Math.abs(chunkX) + Math.abs(chunkZ);
+  const cityChance = levelIndex >= 3
+    ? THREE.MathUtils.clamp(0.18 + (levelIndex - 3) * 0.11 + distanceFromCenter * 0.018, 0.18, 0.52)
+    : 0;
+
+  if (roll < cityChance) {
+    return {
+      type: 'city',
+      material: MATERIALS.cityGround,
+      amplitude: 0.025,
+      carCount: 10,
+      treeCount: 4,
+      fenceCount: 3,
+      officeChance: 0.42,
+      shopChance: 0.36,
+      seed: random() * 1000,
+    };
+  }
+
+  if (roll < cityChance + 0.22) {
+    return {
+      type: 'field',
+      material: MATERIALS.fieldGrass,
+      amplitude: 0.13,
+      carCount: 4,
+      treeCount: 12,
+      fenceCount: 9,
+      officeChance: 0,
+      shopChance: 0.08,
+      seed: random() * 1000,
+    };
+  }
+
+  if (roll < cityChance + 0.45) {
+    return {
+      type: 'dry',
+      material: MATERIALS.grassDry,
+      amplitude: 0.09,
+      carCount: 6,
+      treeCount: 8,
+      fenceCount: 8,
+      officeChance: 0.03,
+      shopChance: 0.16,
+      seed: random() * 1000,
+    };
+  }
+
+  return {
+    type: 'suburban',
+    material: MATERIALS.grass,
+    amplitude: 0.065,
+    carCount: 7,
+    treeCount: 10,
+    fenceCount: 7,
+    officeChance: levelIndex >= 4 ? 0.08 : 0,
+    shopChance: 0.2,
+    seed: random() * 1000,
+  };
+}
+
+function sampleTerrainHeight(profile, localX, localZ) {
+  if (!profile) {
+    return 0;
+  }
+
+  const roadDistance = Math.min(Math.abs(localX), Math.abs(localZ));
+  const roadBlend = THREE.MathUtils.smoothstep(roadDistance, CHUNK_ROAD_CLEARANCE, CHUNK_ROAD_CLEARANCE + 9);
+  const edgeDistance = CHUNK_SIZE * 0.5 - Math.max(Math.abs(localX), Math.abs(localZ));
+  const edgeBlend = THREE.MathUtils.smoothstep(edgeDistance, 0, 8);
+  const waveA = Math.sin((localX + profile.seed) * 0.095) * Math.cos((localZ - profile.seed) * 0.072);
+  const waveB = Math.sin(localX * 0.043 + localZ * 0.061 + profile.seed * 0.31);
+  const height = profile.amplitude * (waveA * 0.66 + waveB * 0.34) * roadBlend * edgeBlend;
+
+  return THREE.MathUtils.clamp(height, -0.12, 0.16);
+}
+
+function createTerrainGeometry(size, profile) {
+  const geometry = new THREE.PlaneGeometry(size, size, 12, 12);
+  const positions = geometry.attributes.position;
+
+  for (let index = 0; index < positions.count; index += 1) {
+    const localX = positions.getX(index);
+    const localZ = positions.getY(index);
+    positions.setZ(index, sampleTerrainHeight(profile, localX, localZ));
+  }
+
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function isNearChunkRoad(localX, localZ, radius, clearance = CHUNK_ROAD_CLEARANCE) {
+  return Math.abs(localX) < clearance + radius || Math.abs(localZ) < clearance + radius;
+}
+
+function isInsideChunkPlacementBounds(localX, localZ, radius, edgeBuffer = 0) {
+  const limit = CHUNK_EDGE_PLACEMENT_LIMIT - edgeBuffer;
+  return Math.abs(localX) + radius < limit && Math.abs(localZ) + radius < limit;
+}
+
+function createPlacementPlanner() {
+  const reservations = [];
+
+  return {
+    reservations,
+
+    reserve(localX, localZ, radius, padding = 0.9, type = 'item') {
+      reservations.push({
+        x: localX,
+        z: localZ,
+        radius: radius + padding,
+        type,
+      });
+    },
+
+    canPlace(localX, localZ, radius, {
+      avoidRoads = true,
+      edgeBuffer = 0,
+      padding = 0.7,
+    } = {}) {
+      if (!isInsideChunkPlacementBounds(localX, localZ, radius, edgeBuffer)) {
+        return false;
+      }
+
+      if (avoidRoads && isNearChunkRoad(localX, localZ, radius)) {
+        return false;
+      }
+
+      for (const reservation of reservations) {
+        const dx = reservation.x - localX;
+        const dz = reservation.z - localZ;
+        const clearance = reservation.radius + radius + padding;
+        if (dx * dx + dz * dz < clearance * clearance) {
+          return false;
+        }
+      }
+
+      return true;
+    },
+  };
+}
+
 function box(width, height, depth, material, x = 0, y = 0, z = 0) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
   mesh.position.set(x, y + height * 0.5, z);
@@ -313,6 +466,54 @@ function createShop(variant = 0) {
   };
 }
 
+function createOfficeBlock(variant = 0) {
+  const group = new THREE.Group();
+  const width = 10.2 + (variant % 3) * 1.1;
+  const depth = 8.5 + (variant % 2) * 1.2;
+  const towerHeight = 8.4 + (variant % 4) * 1.35;
+  const facadeMaterial = variant % 2 === 0 ? MATERIALS.concrete : MATERIALS.brick;
+  const frontZ = -depth * 0.5 - 0.08;
+  const backZ = depth * 0.5 + 0.08;
+  const leftX = -width * 0.5 - 0.08;
+  const rightX = width * 0.5 + 0.08;
+
+  group.add(withRole(box(width + 1.4, 0.45, depth + 1.2, MATERIALS.concrete), 'structure'));
+  group.add(withRole(box(width, towerHeight, depth, facadeMaterial, 0, 0.35, 0), 'structure'));
+  group.add(withRole(box(width + 0.8, 0.54, depth + 0.72, MATERIALS.roofDark, 0, towerHeight + 0.42, 0), 'roof'));
+
+  // Glass bands are intentionally chunky strips instead of per-window meshes.
+  for (const x of [-width * 0.27, 0, width * 0.27]) {
+    group.add(withRole(box(1.1, towerHeight * 0.66, 0.14, MATERIALS.glass, x, towerHeight * 0.2, frontZ), 'detail'));
+    group.add(withRole(box(1.1, towerHeight * 0.56, 0.14, MATERIALS.glass, x, towerHeight * 0.24, backZ), 'detail'));
+  }
+
+  for (const z of [-depth * 0.22, depth * 0.22]) {
+    group.add(withRole(box(0.14, towerHeight * 0.52, 1.0, MATERIALS.glass, leftX, towerHeight * 0.25, z), 'detail'));
+    group.add(withRole(box(0.14, towerHeight * 0.52, 1.0, MATERIALS.glass, rightX, towerHeight * 0.25, z), 'detail'));
+  }
+
+  group.add(withRole(box(2.1, 2.2, 0.18, MATERIALS.door, -width * 0.18, 0.42, frontZ - 0.04), 'detail'));
+  group.add(withRole(box(width * 0.42, 0.42, 0.36, MATERIALS.sign, width * 0.18, 2.55, frontZ - 0.14), 'detail'));
+  group.add(withRole(box(2.7, 0.75, 2.0, MATERIALS.metal, -width * 0.24, towerHeight + 0.9, depth * 0.12), 'detail'));
+  group.add(withRole(box(1.7, 0.58, 1.5, MATERIALS.metal, width * 0.2, towerHeight + 0.9, -depth * 0.16), 'detail'));
+
+  return {
+    group,
+    type: 'Office',
+    variant,
+    massRequired: 172 + (variant % 4) * 16,
+    points: 2500 + (variant % 4) * 420,
+    growth: 58 + (variant % 4) * 8,
+    radius: Math.max(width, depth) * 0.68,
+    proxySize: {
+      width,
+      depth,
+      wallHeight: towerHeight,
+      roofHeight: 0.58,
+    },
+  };
+}
+
 function createTownHall() {
   const group = new THREE.Group();
   group.add(withRole(box(12, 5.4, 9, MATERIALS.brick), 'structure'));
@@ -434,7 +635,7 @@ function createWaterTower() {
 }
 
 const DAMAGE_STAGE_THRESHOLDS = [0.2, 0.48, 0.74];
-const STRUCTURAL_TYPES = new Set(['House', 'Shop', 'Town Hall', 'Water Tower']);
+const STRUCTURAL_TYPES = new Set(['House', 'Shop', 'Office', 'Town Hall', 'Water Tower']);
 
 class Destructible {
   [key: string]: any;
@@ -1064,6 +1265,7 @@ export class Town {
     this.lastInstancingStats = this.instancedTown.getDiagnostics();
     this.groundScars = [];
     this.groundScarTimer = 0;
+    this.terrainProfiles = new Map();
     this.generatedChunks = new Set([chunkKey(0, 0)]);
     this.createTerrain();
     this.group.add(this.groundDamageGroup);
@@ -1326,14 +1528,16 @@ export class Town {
     const originX = chunkX * CHUNK_SIZE;
     const originZ = chunkZ * CHUNK_SIZE;
     const random = mulberry32(hashChunk(chunkX + this.levelIndex * 97, chunkZ - this.levelIndex * 131));
+    const terrainProfile = createTerrainProfile(chunkX, chunkZ, this.levelIndex);
 
-    this.createTerrainPatch(originX, originZ);
-    this.populateProceduralChunk(originX, originZ, random);
+    this.terrainProfiles.set(chunkKey(chunkX, chunkZ), terrainProfile);
+    this.createTerrainPatch(originX, originZ, terrainProfile);
+    this.populateProceduralChunk(originX, originZ, random, terrainProfile);
   }
 
-  createTerrainPatch(originX, originZ) {
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(CHUNK_SIZE + 1, CHUNK_SIZE + 1), MATERIALS.grass);
-    ground.position.set(originX, -0.01, originZ);
+  createTerrainPatch(originX, originZ, terrainProfile) {
+    const ground = new THREE.Mesh(createTerrainGeometry(CHUNK_SIZE + 1, terrainProfile), terrainProfile.material);
+    ground.position.set(originX, -0.012, originZ);
     ground.rotation.x = -Math.PI * 0.5;
     ground.receiveShadow = true;
     this.group.add(ground);
@@ -1353,55 +1557,142 @@ export class Town {
     }
   }
 
-  populateProceduralChunk(originX, originZ, random) {
-    const localLots = this.levelIndex >= 3 ? [-27, -15, 15, 27] : [-25, -14, 14, 25];
+  getTerrainHeightAt(worldX, worldZ) {
+    const chunkX = Math.round(worldX / CHUNK_SIZE);
+    const chunkZ = Math.round(worldZ / CHUNK_SIZE);
+    const terrainProfile = this.terrainProfiles.get(chunkKey(chunkX, chunkZ));
+    if (!terrainProfile) {
+      return 0;
+    }
+
+    return sampleTerrainHeight(terrainProfile, worldX - chunkX * CHUNK_SIZE, worldZ - chunkZ * CHUNK_SIZE);
+  }
+
+  createChunkPosition(originX, originZ, localX, localZ, terrainProfile) {
+    return new THREE.Vector3(
+      originX + localX,
+      sampleTerrainHeight(terrainProfile, localX, localZ),
+      originZ + localZ,
+    );
+  }
+
+  populateProceduralChunk(originX, originZ, random, terrainProfile) {
+    const localLots = terrainProfile.type === 'city'
+      ? [-28, -16, 16, 28]
+      : (this.levelIndex >= 3 ? [-27, -15, 15, 27] : [-25, -14, 14, 25]);
+    const planner = createPlacementPlanner();
+    const placedLots = [];
+    const isOutsideCenterTownReserve = (localX, localZ, radius) => (
+      Math.abs(originX + localX) > TOWN_BOUNDARY + radius
+      || Math.abs(originZ + localZ) > TOWN_BOUNDARY + radius
+    );
+    const canPlaceInChunk = (localX, localZ, radius, options) => (
+      isOutsideCenterTownReserve(localX, localZ, radius)
+      && planner.canPlace(localX, localZ, radius, options)
+    );
     let variant = Math.floor(random() * 1000);
-    const shopThreshold = Math.max(0.7, 0.82 - this.levelIndex * 0.035);
+    const shopThreshold = 1 - terrainProfile.shopChance;
+    const vacancyChance = terrainProfile.type === 'city' ? 0.03 : 0.08;
 
     for (const localX of localLots) {
       for (const localZ of localLots) {
         const roll = random();
-        if (roll < 0.08) {
+        if (roll < vacancyChance) {
           continue;
         }
 
-        const position = new THREE.Vector3(
-          originX + localX + (random() - 0.5) * 3.2,
-          0,
-          originZ + localZ + (random() - 0.5) * 3.2,
-        );
-        const config = roll > shopThreshold ? createShop(variant) : createHouse(variant);
-        this.addItem(config, position, Math.floor(random() * 4) * Math.PI * 0.5);
+        const jitter = terrainProfile.type === 'city' ? 1.7 : 3.2;
+        const placedX = localX + (random() - 0.5) * jitter;
+        const placedZ = localZ + (random() - 0.5) * jitter;
+        const useOffice = random() < terrainProfile.officeChance;
+        const config = useOffice
+          ? createOfficeBlock(variant)
+          : (roll > shopThreshold ? createShop(variant) : createHouse(variant));
+        if (!canPlaceInChunk(placedX, placedZ, config.radius, { padding: 0.5 })) {
+          continue;
+        }
+
+        const position = this.createChunkPosition(originX, originZ, placedX, placedZ, terrainProfile);
+        this.addItem(config, position, Math.floor(random() * 4) * Math.PI * 0.5, 'procedural');
+        planner.reserve(placedX, placedZ, config.radius, terrainProfile.type === 'city' ? 1.1 : 1.6, config.type);
+        placedLots.push({ x: placedX, z: placedZ, radius: config.radius });
         variant += 1;
       }
     }
 
-    for (let index = 0; index < 7; index += 1) {
-      const alongRoad = -CHUNK_SIZE * 0.42 + index * (CHUNK_SIZE * 0.14);
-      const side = random() > 0.5 ? -7.2 : 7.2;
+    for (let index = 0; index < terrainProfile.carCount; index += 1) {
       const onVerticalRoad = random() > 0.5;
-      this.addItem(
-        createCar(variant + index),
-        new THREE.Vector3(
-          originX + (onVerticalRoad ? side : alongRoad),
-          0,
-          originZ + (onVerticalRoad ? alongRoad : side),
-        ),
-        onVerticalRoad ? Math.PI * 0.5 : 0,
-      );
+      let placed = false;
+      for (let attempt = 0; attempt < 10 && !placed; attempt += 1) {
+        const alongRoad = -CHUNK_SIZE * 0.39 + random() * CHUNK_SIZE * 0.78;
+        if (Math.abs(alongRoad) < INTERSECTION_CLEARANCE) {
+          continue;
+        }
+
+        const side = (random() > 0.5 ? -1 : 1) * PARKING_LANE_OFFSET;
+        const localX = onVerticalRoad ? side : alongRoad;
+        const localZ = onVerticalRoad ? alongRoad : side;
+        const config = createCar(variant + index + attempt);
+        if (!canPlaceInChunk(localX, localZ, config.radius, { avoidRoads: false, edgeBuffer: 2, padding: 0.25 })) {
+          continue;
+        }
+
+        this.addItem(
+          config,
+          this.createChunkPosition(originX, originZ, localX, localZ, terrainProfile),
+          onVerticalRoad ? Math.PI * 0.5 : 0,
+          'procedural',
+        );
+        planner.reserve(localX, localZ, config.radius, 0.25, 'Car');
+        placed = true;
+      }
     }
 
-    for (let index = 0; index < 10; index += 1) {
-      const edge = Math.floor(random() * 4);
-      const x = edge < 2 ? -CHUNK_SIZE * 0.44 + random() * CHUNK_SIZE * 0.88 : (edge === 2 ? -30 : 30);
-      const z = edge >= 2 ? -CHUNK_SIZE * 0.44 + random() * CHUNK_SIZE * 0.88 : (edge === 0 ? -30 : 30);
-      this.addItem(createTree(), new THREE.Vector3(originX + x, 0, originZ + z), random() * Math.PI * 2);
+    for (let index = 0; index < terrainProfile.treeCount; index += 1) {
+      for (let attempt = 0; attempt < 10; attempt += 1) {
+        const edge = Math.floor(random() * 4);
+        const x = edge < 2
+          ? -CHUNK_SIZE * 0.42 + random() * CHUNK_SIZE * 0.84
+          : (edge === 2 ? -31 : 31);
+        const z = edge >= 2
+          ? -CHUNK_SIZE * 0.42 + random() * CHUNK_SIZE * 0.84
+          : (edge === 0 ? -31 : 31);
+        const config = createTree();
+        if (!canPlaceInChunk(x, z, config.radius, { padding: 1.0 })) {
+          continue;
+        }
+
+        this.addItem(config, this.createChunkPosition(originX, originZ, x, z, terrainProfile), random() * Math.PI * 2, 'procedural');
+        planner.reserve(x, z, config.radius, 1.1, 'Tree');
+        break;
+      }
     }
 
-    for (let index = 0; index < 8; index += 1) {
-      const x = -CHUNK_SIZE * 0.38 + index * (CHUNK_SIZE * 0.11);
-      const z = random() > 0.5 ? -CHUNK_SIZE * 0.45 : CHUNK_SIZE * 0.45;
-      this.addItem(createFence(3.6 + random() * 2.6), new THREE.Vector3(originX + x, 0, originZ + z), random() > 0.5 ? 0 : Math.PI * 0.5);
+    for (let index = 0; index < terrainProfile.fenceCount; index += 1) {
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const anchorLot = placedLots.length > 0 ? placedLots[Math.floor(random() * placedLots.length)] : null;
+        const fenceLength = 3.6 + random() * 2.6;
+        const config = createFence(fenceLength);
+        const alongEdge = -CHUNK_SIZE * 0.36 + random() * CHUNK_SIZE * 0.72;
+        const useLotEdge = Boolean(anchorLot && random() > 0.45);
+        const x = useLotEdge
+          ? anchorLot.x + (random() > 0.5 ? -1 : 1) * (anchorLot.radius + config.radius * 0.38)
+          : alongEdge;
+        const z = useLotEdge
+          ? anchorLot.z + (random() > 0.5 ? -1 : 1) * (anchorLot.radius + 1.15)
+          : (random() > 0.5 ? -CHUNK_SIZE * 0.43 : CHUNK_SIZE * 0.43);
+        const rotation = useLotEdge
+          ? (random() > 0.5 ? 0 : Math.PI * 0.5)
+          : 0;
+
+        if (!canPlaceInChunk(x, z, config.radius, { padding: 0.15 })) {
+          continue;
+        }
+
+        this.addItem(config, this.createChunkPosition(originX, originZ, x, z, terrainProfile), rotation, 'procedural');
+        planner.reserve(x, z, config.radius, 0.15, 'Fence');
+        break;
+      }
     }
   }
 
@@ -1433,7 +1724,11 @@ export class Town {
     const material = materialTemplate.clone();
     material.opacity = opacity;
     const scar = new THREE.Mesh(new THREE.CircleGeometry(1, 26), material);
-    scar.position.set(position.x, 0.115 + this.groundScars.length * 0.0003, position.z);
+    scar.position.set(
+      position.x,
+      this.getTerrainHeightAt(position.x, position.z) + 0.115 + this.groundScars.length * 0.0003,
+      position.z,
+    );
     scar.rotation.x = -Math.PI * 0.5;
     scar.rotation.z = Math.random() * Math.PI;
     scar.scale.set(radius * (0.65 + Math.random() * 0.35), radius * (0.28 + Math.random() * 0.28), 1);
@@ -1471,7 +1766,8 @@ export class Town {
         }
 
         const selector = Math.abs((x * 13 + z * 7 + variant + level * 11) % shopFrequency);
-        const config = selector === 0 ? createShop(variant) : createHouse(variant);
+        const canUseOffice = level >= 3 && selector === 1 && Math.abs(x) >= 18 && Math.abs(z) >= 18;
+        const config = canUseOffice ? createOfficeBlock(variant) : (selector === 0 ? createShop(variant) : createHouse(variant));
         this.addItem(config, new THREE.Vector3(x, 0, z), ((x + z) % 4) * Math.PI * 0.5);
         variant += 1;
       }
@@ -1528,9 +1824,15 @@ export class Town {
     }
   }
 
-  addItem(config, position, rotation = 0) {
-    const item = new Destructible(config, position, rotation, this.debrisEffects);
-    const renderProxy = this.instancedTown.addItemProxy(config, position, rotation);
+  addItem(config, position, rotation = 0, source = 'crafted') {
+    const groundedPosition = position.clone();
+    if (Math.abs(groundedPosition.y) < 0.001) {
+      groundedPosition.y = this.getTerrainHeightAt(groundedPosition.x, groundedPosition.z);
+    }
+
+    const item = new Destructible(config, groundedPosition, rotation, this.debrisEffects);
+    item.source = source;
+    const renderProxy = this.instancedTown.addItemProxy(config, groundedPosition, rotation);
     item.setRenderProxy(this.group, this.instancedTown, renderProxy);
     this.items.push(item);
     this.registerItem(item);
