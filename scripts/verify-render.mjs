@@ -428,8 +428,11 @@ try {
       || !debugOverlay.text.includes('LOD Blend / Fade')
       || !debugOverlay.text.includes('Input')
       || !debugOverlay.text.includes('Carry / Fresh')
+      || !debugOverlay.text.includes('Startup Hitches')
       || typeof debugOverlay.diagnostics.fps !== 'number'
       || typeof debugOverlay.diagnostics.hitchCount !== 'number'
+      || typeof debugOverlay.diagnostics.startupHitchCount !== 'number'
+      || typeof debugOverlay.diagnostics.warmupComplete !== 'boolean'
       || debugOverlay.diagnostics.sceneObjects <= 0
     ) {
       errors.push(`${viewport.name}: debug overlay did not report performance/object diagnostics (${JSON.stringify(debugOverlay)})`);

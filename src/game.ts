@@ -18,6 +18,7 @@ const SHADOW_MAP_SIZE = 1024;
 const MAX_ABSORPTIONS_PER_FRAME = 8;
 const DIAGNOSTICS_UPDATE_INTERVAL_MS = 450;
 const HITCH_FRAME_THRESHOLD_MS = 75;
+const PERFORMANCE_WARMUP_DURATION_MS = 3000;
 const MIN_LEVEL_DURATION_BY_INDEX = [10, 14, 18, 22, 26];
 const LEVEL_TARGET_MULTIPLIER_BY_CATEGORY = [1, 2.4, 5.5, 12, 25];
 const LEVEL_DAMAGE_BONUS_BY_CATEGORY = [0, 0.04, 0.1, 0.17, 0.24];
@@ -188,9 +189,11 @@ function createCustomQualityProfile(settings) {
 }
 
 function createPerformanceStats() {
+  const startedAt = performance.now();
+
   return {
     lastFrameStartedAt: 0,
-    sampleStartedAt: performance.now(),
+    sampleStartedAt: startedAt,
     sampleFrames: 0,
     sampleFrameMs: 0,
     sampleWorkMs: 0,
@@ -206,7 +209,23 @@ function createPerformanceStats() {
     hitchCount: 0,
     lastHitchMs: 0,
     longestHitchMs: 0,
+    warmupStartedAt: startedAt,
+    warmupUntil: startedAt + PERFORMANCE_WARMUP_DURATION_MS,
+    warmupComplete: false,
+    startupFrameCount: 0,
+    startupHitchCount: 0,
+    startupLongestFrameMs: 0,
+    startupMaxWorkMs: 0,
   };
+}
+
+function resetPerformanceSample(stats, now = performance.now()) {
+  stats.sampleStartedAt = now;
+  stats.sampleFrames = 0;
+  stats.sampleFrameMs = 0;
+  stats.sampleWorkMs = 0;
+  stats.sampleMaxFrameMs = 0;
+  stats.sampleMaxWorkMs = 0;
 }
 
 function createSceneStats() {
@@ -818,8 +837,38 @@ export class Game {
 
   samplePerformance(frameMs, workMs) {
     const stats = this.performanceStats;
+    const now = performance.now();
     stats.lastFrameMs = frameMs;
     stats.lastWorkMs = workMs;
+
+    // Initial shader compilation and render-target allocation can create large
+    // one-off stalls. Keep them visible, but do not let them masquerade as
+    // gameplay hitching for the rest of the run.
+    if (!stats.warmupComplete) {
+      if (frameMs > 0) {
+        stats.startupFrameCount += 1;
+        stats.startupLongestFrameMs = Math.max(stats.startupLongestFrameMs, frameMs);
+        stats.startupMaxWorkMs = Math.max(stats.startupMaxWorkMs, workMs);
+        if (frameMs >= HITCH_FRAME_THRESHOLD_MS) {
+          stats.startupHitchCount += 1;
+        }
+      }
+
+      if (now < stats.warmupUntil) {
+        return;
+      }
+
+      stats.warmupComplete = true;
+      resetPerformanceSample(stats, now);
+      window.__townfallLog?.('info', 'render-warmup-complete', {
+        durationMs: Number((now - stats.warmupStartedAt).toFixed(2)),
+        frames: stats.startupFrameCount,
+        hitchCount: stats.startupHitchCount,
+        longestFrameMs: Number(stats.startupLongestFrameMs.toFixed(2)),
+        maxWorkMs: Number(stats.startupMaxWorkMs.toFixed(2)),
+      });
+      return;
+    }
 
     if (frameMs > 0) {
       stats.sampleFrames += 1;
@@ -836,7 +885,6 @@ export class Game {
       stats.lastHitchMs = frameMs;
       stats.longestHitchMs = Math.max(stats.longestHitchMs, frameMs);
 
-      const now = performance.now();
       if (now - this.lastHitchLogAt > 2000) {
         this.lastHitchLogAt = now;
         window.__townfallLog?.('warn', 'frame-hitch', {
@@ -849,7 +897,6 @@ export class Game {
       }
     }
 
-    const now = performance.now();
     const sampleDuration = now - stats.sampleStartedAt;
     if (sampleDuration < 1000 || stats.sampleFrames === 0) {
       return;
@@ -860,12 +907,7 @@ export class Game {
     stats.averageWorkMs = stats.sampleWorkMs / stats.sampleFrames;
     stats.maxFrameMs = stats.sampleMaxFrameMs;
     stats.maxWorkMs = stats.sampleMaxWorkMs;
-    stats.sampleStartedAt = now;
-    stats.sampleFrames = 0;
-    stats.sampleFrameMs = 0;
-    stats.sampleWorkMs = 0;
-    stats.sampleMaxFrameMs = 0;
-    stats.sampleMaxWorkMs = 0;
+    resetPerformanceSample(stats, now);
   }
 
   update(dt) {
@@ -1143,6 +1185,13 @@ export class Game {
       lastHitchMs: Number(performanceStats.lastHitchMs.toFixed(2)),
       longestHitchMs: Number(performanceStats.longestHitchMs.toFixed(2)),
       hitchThresholdMs: HITCH_FRAME_THRESHOLD_MS,
+      performancePhase: performanceStats.warmupComplete ? 'gameplay' : 'startup',
+      warmupComplete: performanceStats.warmupComplete,
+      warmupDurationMs: PERFORMANCE_WARMUP_DURATION_MS,
+      startupFrameCount: performanceStats.startupFrameCount,
+      startupHitchCount: performanceStats.startupHitchCount,
+      startupLongestFrameMs: Number(performanceStats.startupLongestFrameMs.toFixed(2)),
+      startupMaxWorkMs: Number(performanceStats.startupMaxWorkMs.toFixed(2)),
       tornadoX: Number(this.tornado.position.x.toFixed(2)),
       tornadoZ: Number(this.tornado.position.z.toFixed(2)),
       stormCategory: profile.category,
@@ -1255,6 +1304,13 @@ export class Game {
       lastHitchMs: String(diagnostics.lastHitchMs),
       longestHitchMs: String(diagnostics.longestHitchMs),
       hitchThresholdMs: String(diagnostics.hitchThresholdMs),
+      performancePhase: diagnostics.performancePhase,
+      warmupComplete: String(diagnostics.warmupComplete),
+      warmupDurationMs: String(diagnostics.warmupDurationMs),
+      startupFrameCount: String(diagnostics.startupFrameCount),
+      startupHitchCount: String(diagnostics.startupHitchCount),
+      startupLongestFrameMs: String(diagnostics.startupLongestFrameMs),
+      startupMaxWorkMs: String(diagnostics.startupMaxWorkMs),
       tornadoX: String(diagnostics.tornadoX),
       tornadoZ: String(diagnostics.tornadoZ),
       stormCategory: String(diagnostics.stormCategory),
@@ -1427,11 +1483,14 @@ export class Game {
         <strong>F3</strong>
       </div>
       ${this.renderDebugSection('Performance', [
+        ['Phase', diagnostics.performancePhase],
         ['FPS', formatDebugNumber(diagnostics.fps, 1)],
         ['Frame Avg / Max', `${formatDebugNumber(diagnostics.averageFrameMs, 1)} / ${formatDebugNumber(diagnostics.maxFrameMs, 1)} ms`],
         ['Work Avg / Max', `${formatDebugNumber(diagnostics.averageWorkMs, 1)} / ${formatDebugNumber(diagnostics.maxWorkMs, 1)} ms`],
         ['Hitches', `${formatDebugNumber(diagnostics.hitchCount)} over ${formatDebugNumber(diagnostics.hitchThresholdMs)} ms`],
         ['Worst Hitch', `${formatDebugNumber(diagnostics.longestHitchMs, 1)} ms`],
+        ['Startup Hitches', `${formatDebugNumber(diagnostics.startupHitchCount)} over ${formatDebugNumber(diagnostics.hitchThresholdMs)} ms`],
+        ['Startup Worst', `${formatDebugNumber(diagnostics.startupLongestFrameMs, 1)} ms`],
       ])}
       ${this.renderDebugSection('Render', [
         ['Draw Calls', formatDebugNumber(diagnostics.drawCalls)],

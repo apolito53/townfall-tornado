@@ -49,6 +49,9 @@ This Vite project has a dedicated strict port assignment so it can run beside th
 npm.cmd run build
 npm.cmd run typecheck
 $env:TOWNFALL_URL='http://127.0.0.1:5175/'; npm.cmd run verify:render
+npm.cmd run baseline:v1
 ```
 
 The render verification captures desktop and mobile screenshots under `artifacts/` and checks that the WebGL canvas is nonblank, keyboard/mobile input moves the storm, terrain profiles are varied, and generated props stay out of road/intersection/center-town reserve zones.
+
+`baseline:v1` starts the Vite server itself when needed, captures Cat 1, Cat 3, Cat 5, and oversized stress metrics for desktop High and mobile Low, and writes the committed rebuild reference set under `docs/rebuild/baseline/v1/`.

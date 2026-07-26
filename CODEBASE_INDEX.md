@@ -25,6 +25,7 @@
 - `src/ui.ts` updates the level tracker, HUD, growth bar, timer, and short storm messages.
 - `src/globals.d.ts` declares local browser diagnostics hooks used by the smoke tests.
 - `scripts/debug-log-server.mjs` runs the optional `127.0.0.1:5176` JSONL log receiver and exposes `/health`, `/log`, and `/recent` for live debugging.
+- `scripts/capture-rebuild-baseline.mjs` starts Vite when needed and captures reproducible desktop/mobile Cat 1, Cat 3, Cat 5, and oversized stress metrics under `docs/rebuild/baseline/`.
 - `scripts/verify-render.mjs` runs a Playwright smoke test against a live dev server, saves screenshots, and verifies high-category radius/camera scaling, level UI, minimum-duration level pacing, level advancement, active post-processing diagnostics, capped pixel ratio, capped debris/effects, render LOD, terrain-profile variation, generated prop placement, and town simulation culling through the local `window.__townfallGame` hook.
 
 ## Common Change Targets
@@ -44,6 +45,7 @@
 npm.cmd run build
 npm.cmd run typecheck
 $env:TOWNFALL_URL='http://127.0.0.1:5175/'; npm.cmd run verify:render
+npm.cmd run baseline:v1
 ```
 
 `verify:render` expects the Vite dev server to be running on `http://127.0.0.1:5175/`.
