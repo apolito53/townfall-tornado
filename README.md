@@ -2,6 +2,8 @@
 
 A tiny 3D arcade destruction prototype where you steer a tornado through a town, absorb lighter objects, grow into higher categories, and work your way up to larger buildings. The current pass uses staged structural damage, visible ground scarring, pooled GPU debris particles, instanced larger chunks, phase-blended far-town proxies, a sky-connected funnel descending from a wall cloud, procedural town chunks with varied terrain/city profiles, and dramatic category-based scale changes for both tornado diameter and camera distance.
 
+The current build is the preserved v1 prototype. The controlled v2 rebuild direction, architecture, milestones, performance budgets, and replacement gate live in [REBUILD_PLAN.md](./REBUILD_PLAN.md).
+
 ## Play
 
 Live demo: [https://townfall-tornado.vercel.app/](https://townfall-tornado.vercel.app/)
