@@ -86,7 +86,7 @@ const ROADS: readonly RoadDefinition[] = [
     width: 13,
     shoulderWidth: 5,
     markings: 'center-dash',
-    sidewalk: 'none',
+    sidewalk: 'both',
     points: [
       { x: -280, z: 1300, elevation: 38 },
       { x: -220, z: 900, elevation: 24 },
@@ -761,6 +761,7 @@ function createFenceLine(
   terrain: TerrainField,
 ): WorldItemRecord[] {
   const rotationY = Math.atan2(endX - startX, endZ - startZ);
+  const segmentLength = Math.hypot(endX - startX, endZ - startZ) / count;
   const items: WorldItemRecord[] = [];
   for (let index = 0; index < count; index += 1) {
     const amount = (index + 0.5) / count;
@@ -771,7 +772,7 @@ function createFenceLine(
       startZ + (endZ - startZ) * amount,
       rotationY,
       'post-and-rail',
-      1,
+      segmentLength / 4,
       terrain,
     ));
   }

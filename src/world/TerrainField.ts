@@ -78,15 +78,23 @@ export function projectToRoad(
   z: number,
   road: RoadDefinition,
 ): RoadProjection {
+  return projectToRoadPoints(x, z, getSmoothedRoadPoints(road));
+}
+
+function projectToRoadPoints(
+  x: number,
+  z: number,
+  points: readonly RoadControlPoint[],
+): RoadProjection {
   let nearest: RoadProjection = {
     distance: Number.POSITIVE_INFINITY,
     elevation: 0,
     rotationY: 0,
   };
 
-  for (let index = 0; index < road.points.length - 1; index += 1) {
-    const start = road.points[index];
-    const end = road.points[index + 1];
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const start = points[index];
+    const end = points[index + 1];
     if (start === undefined || end === undefined) {
       continue;
     }
@@ -97,6 +105,45 @@ export function projectToRoad(
   }
 
   return nearest;
+}
+
+export function getSmoothedRoadPoints(
+  road: RoadDefinition,
+  iterations = 3,
+): readonly RoadControlPoint[] {
+  let points = road.points.map((point) => ({ ...point }));
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    if (points.length < 2) {
+      break;
+    }
+    const smoothed: RoadControlPoint[] = [];
+    const first = points[0];
+    const last = points[points.length - 1];
+    if (first === undefined || last === undefined) {
+      break;
+    }
+    smoothed.push({ ...first });
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const start = points[index];
+      const end = points[index + 1];
+      if (start === undefined || end === undefined) {
+        continue;
+      }
+      smoothed.push({
+        x: lerp(start.x, end.x, 0.25),
+        z: lerp(start.z, end.z, 0.25),
+        elevation: lerp(start.elevation, end.elevation, 0.25),
+      });
+      smoothed.push({
+        x: lerp(start.x, end.x, 0.75),
+        z: lerp(start.z, end.z, 0.75),
+        elevation: lerp(start.elevation, end.elevation, 0.75),
+      });
+    }
+    smoothed.push({ ...last });
+    points = smoothed;
+  }
+  return points;
 }
 
 export function getRoadSegmentGrade(
@@ -154,12 +201,14 @@ export class TerrainField {
   readonly bounds: WorldBounds;
   private readonly seedValue: number;
   private readonly roads: readonly RoadDefinition[];
+  private readonly roadPaths: readonly (readonly RoadControlPoint[])[];
   private readonly lots: readonly LotDefinition[];
 
   constructor(options: TerrainFieldOptions) {
     this.seedValue = options.seed.value;
     this.bounds = { ...options.bounds };
     this.roads = options.roads;
+    this.roadPaths = options.roads.map((road) => getSmoothedRoadPoints(road));
     this.lots = options.lots;
   }
 
@@ -188,8 +237,13 @@ export class TerrainField {
   sampleHeight(x: number, z: number): number {
     let height = this.sampleBaseHeight(x, z);
 
-    for (const road of this.roads) {
-      const projection = projectToRoad(x, z, road);
+    for (let index = 0; index < this.roads.length; index += 1) {
+      const road = this.roads[index];
+      const roadPath = this.roadPaths[index];
+      if (road === undefined || roadPath === undefined) {
+        continue;
+      }
+      const projection = projectToRoadPoints(x, z, roadPath);
       const roadEdge = road.width * 0.5;
       const blendEdge = roadEdge + road.shoulderWidth + ROAD_BLEND_MARGIN;
       const weight = 1 - smoothstep(roadEdge, blendEdge, projection.distance);
@@ -295,8 +349,13 @@ export class TerrainField {
     x: number,
     z: number,
   ): TerrainSample['surface'] {
-    for (const road of this.roads) {
-      const projection = projectToRoad(x, z, road);
+    for (let index = 0; index < this.roads.length; index += 1) {
+      const road = this.roads[index];
+      const roadPath = this.roadPaths[index];
+      if (road === undefined || roadPath === undefined) {
+        continue;
+      }
+      const projection = projectToRoadPoints(x, z, roadPath);
       if (projection.distance <= road.width * 0.5) {
         return road.surface;
       }
