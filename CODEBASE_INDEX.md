@@ -4,6 +4,7 @@
 
 - Vite app with Three.js.
 - Public Vercel deployment: `https://townfall-tornado.vercel.app/`.
+- V2 branch preview: `https://townfall-tornado-git-rebuild-v2-anthony-polito-s-projects.vercel.app/`.
 - V2 rebuild roadmap: `REBUILD_PLAN.md`.
 - Locked v1 screenshots, metrics, findings, and v2 comparison gates: `docs/rebuild/V1_BASELINE.md`.
 - Entry point: `src/main.ts`.

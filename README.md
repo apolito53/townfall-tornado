@@ -6,7 +6,9 @@ The current build is the preserved v1 prototype. The controlled v2 rebuild direc
 
 ## Play
 
-Live demo: [https://townfall-tornado.vercel.app/](https://townfall-tornado.vercel.app/)
+V1 production: [https://townfall-tornado.vercel.app/](https://townfall-tornado.vercel.app/)
+
+V2 rebuild preview: [https://townfall-tornado-git-rebuild-v2-anthony-polito-s-projects.vercel.app/](https://townfall-tornado-git-rebuild-v2-anthony-polito-s-projects.vercel.app/)
 
 ## Run
 
