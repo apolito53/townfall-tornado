@@ -8,6 +8,7 @@
     "debug:logs": "node scripts/debug-log-server.mjs",
     "baseline:v1": "node scripts/capture-rebuild-baseline.mjs --label v1",
     "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run",
     "build": "vite build",
     "verify:architecture": "node scripts/verify-foundation-architecture.mjs",
     "verify:render": "node scripts/verify-render.mjs"
@@ -19,6 +20,7 @@
     "@playwright/test": "^1.57.0",
     "@types/three": "^0.181.0",
     "typescript": "^6.0.3",
-    "vite": "^7.3.6"
+    "vite": "^7.3.6",
+    "vitest": "^3.2.4"
   }
 }

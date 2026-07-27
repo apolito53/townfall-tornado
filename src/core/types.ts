@@ -3,6 +3,8 @@ export type AppPhase = 'menu' | 'running' | 'paused';
 export type InputSource = 'idle' | 'keyboard' | 'pointer' | 'mobile-joystick';
 export type QualityPresetKey = 'low' | 'medium' | 'high';
 export type QualityMode = 'auto' | QualityPresetKey | 'custom';
+export type WeatherMode = 'storm' | 'clear';
+export type ReviewStormCategory = 1 | 3 | 5;
 
 export interface WorldPosition {
   x: number;
@@ -25,6 +27,12 @@ export interface StormProfile {
   condensationDensity: number;
 }
 
+export interface StormSnapshot {
+  profile: StormProfile;
+  position: WorldPosition;
+  velocity: WorldPosition;
+}
+
 export interface WorldSeed {
   label: string;
   value: number;
@@ -41,26 +49,113 @@ export interface DistrictDescriptor {
 export interface TerrainSample {
   height: number;
   normal: WorldPosition;
-  surface: 'grass' | 'soil' | 'road' | 'concrete';
+  surface: 'grass' | 'soil' | 'road' | 'concrete' | 'gravel';
+}
+
+export interface WorldBounds {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+export interface RoadControlPoint {
+  x: number;
+  z: number;
+  elevation: number;
+}
+
+export interface RoadDefinition {
+  id: string;
+  kind: 'collector' | 'local' | 'service';
+  surface: 'road' | 'gravel';
+  width: number;
+  shoulderWidth: number;
+  markings: 'center-dash' | 'center-solid' | 'none';
+  sidewalk: 'none' | 'left' | 'right' | 'both';
+  points: readonly RoadControlPoint[];
+}
+
+export interface LotDefinition {
+  id: string;
+  roadId: string;
+  use: 'residential' | 'commercial' | 'civic' | 'agricultural' | 'utility';
+  center: WorldPosition;
+  width: number;
+  depth: number;
+  rotationY: number;
+  padBlend: number;
+  surface: 'grass' | 'soil' | 'concrete' | 'gravel';
+  drivewayAnchor: WorldPosition;
 }
 
 export interface WorldItemRecord {
   id: string;
-  kind: 'building' | 'tree' | 'fence' | 'car' | 'road';
+  kind:
+    | 'building'
+    | 'tree'
+    | 'fence'
+    | 'car'
+    | 'road'
+    | 'utility-pole'
+    | 'mailbox'
+    | 'road-sign'
+    | 'hydrant'
+    | 'field-prop';
   position: WorldPosition;
   rotationY: number;
   districtId: string;
+  variant: string;
+  scale: number;
 }
+
+export type BuildingArchetype =
+  | 'ranch'
+  | 'two-story'
+  | 'duplex'
+  | 'manufactured'
+  | 'school'
+  | 'fire-station'
+  | 'convenience-store'
+  | 'strip-shop'
+  | 'warehouse'
+  | 'barn'
+  | 'utility';
 
 export interface BuildingDefinition {
   id: string;
+  archetype: BuildingArchetype;
   footprint: {
     width: number;
     depth: number;
   };
   height: number;
+  stories: number;
   material: 'wood' | 'brick' | 'steel' | 'concrete';
+  roof: {
+    shape: 'gable' | 'hip' | 'flat';
+    material: 'shingle' | 'metal' | 'membrane';
+    pitch: number;
+  };
   resistance: number;
+}
+
+export interface BuildingRecord {
+  item: WorldItemRecord;
+  lotId: string;
+  paletteIndex: number;
+  definition: BuildingDefinition;
+}
+
+export interface DioramaDistrictData {
+  descriptor: DistrictDescriptor;
+  bounds: WorldBounds;
+  spawn: WorldPosition;
+  roads: readonly RoadDefinition[];
+  lots: readonly LotDefinition[];
+  buildings: readonly BuildingRecord[];
+  props: readonly WorldItemRecord[];
+  signature: string;
 }
 
 export interface StructuralState {
