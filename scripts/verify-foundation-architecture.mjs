@@ -58,8 +58,13 @@ for (const contractName of [
   'WorldSeed',
   'DistrictDescriptor',
   'TerrainSample',
+  'RoadDefinition',
+  'LotDefinition',
   'WorldItemRecord',
   'BuildingDefinition',
+  'BuildingRecord',
+  'DioramaDistrictData',
+  'StormSnapshot',
   'StructuralState',
   'DestructionEvent',
   'RenderQualityProfile',
@@ -69,12 +74,15 @@ for (const contractName of [
     errors.push(`src/core/types.ts: missing ${contractName}`);
   }
 }
+if (!contracts.includes('export type WeatherMode')) {
+  errors.push('src/core/types.ts: missing WeatherMode');
+}
 
 if (errors.length > 0) {
-  throw new Error(`Foundation architecture verification failed:\n${errors.join('\n')}`);
+  throw new Error(`V2 architecture verification failed:\n${errors.join('\n')}`);
 }
 
 console.log(
-  `foundation architecture ok: ${activeFiles.length} strict active TypeScript files, `
-  + 'v1 isolated, core contracts present',
+  `v2 architecture ok: ${activeFiles.length} strict active TypeScript files, `
+  + 'v1 isolated, diorama contracts present',
 );

@@ -6,6 +6,50 @@ import {
   createNorthStarDistrict,
 } from './northStarDistrict';
 
+function distanceToSegment(
+  x: number,
+  z: number,
+  startX: number,
+  startZ: number,
+  endX: number,
+  endZ: number,
+): number {
+  const segmentX = endX - startX;
+  const segmentZ = endZ - startZ;
+  const lengthSquared = segmentX * segmentX + segmentZ * segmentZ;
+  const amount = lengthSquared === 0
+    ? 0
+    : Math.max(0, Math.min(
+      1,
+      ((x - startX) * segmentX + (z - startZ) * segmentZ)
+        / lengthSquared,
+    ));
+  return Math.hypot(
+    x - (startX + segmentX * amount),
+    z - (startZ + segmentZ * amount),
+  );
+}
+
+function pointFallsInsideRotatedRectangle(
+  x: number,
+  z: number,
+  centerX: number,
+  centerZ: number,
+  width: number,
+  depth: number,
+  rotationY: number,
+  margin = 0,
+): boolean {
+  const offsetX = x - centerX;
+  const offsetZ = z - centerZ;
+  const cosine = Math.cos(-rotationY);
+  const sine = Math.sin(-rotationY);
+  const localX = offsetX * cosine - offsetZ * sine;
+  const localZ = offsetX * sine + offsetZ * cosine;
+  return Math.abs(localX) <= width * 0.5 + margin
+    && Math.abs(localZ) <= depth * 0.5 + margin;
+}
+
 function countPropsByKind(
   props: ReturnType<typeof createNorthStarDistrict>['data']['props'],
   kind: typeof props[number]['kind'],
@@ -92,6 +136,74 @@ describe('north-star district', () => {
           projection.distance,
           `${prop.id} overlaps ${road.id}`,
         ).toBeGreaterThan(road.width * 0.5);
+      }
+    }
+  });
+
+  it('keeps generated trees clear of all authored reservations', () => {
+    const { data } = createNorthStarDistrict();
+    const trees = data.props.filter((prop) => prop.kind === 'tree');
+
+    for (const tree of trees) {
+      for (const road of data.roads) {
+        const projection = projectToRoad(
+          tree.position.x,
+          tree.position.z,
+          road,
+        );
+        expect(
+          projection.distance,
+          `${tree.id} enters the ${road.id} road reservation`,
+        ).toBeGreaterThanOrEqual(
+          road.width * 0.5 + road.shoulderWidth + 4,
+        );
+      }
+
+      for (const building of data.buildings) {
+        expect(
+          pointFallsInsideRotatedRectangle(
+            tree.position.x,
+            tree.position.z,
+            building.item.position.x,
+            building.item.position.z,
+            building.definition.footprint.width,
+            building.definition.footprint.depth,
+            building.item.rotationY,
+            14,
+          ),
+          `${tree.id} enters the ${building.item.id} building reservation`,
+        ).toBe(false);
+      }
+
+      for (const lot of data.lots) {
+        const drivewayDistance = distanceToSegment(
+          tree.position.x,
+          tree.position.z,
+          lot.drivewayAnchor.x,
+          lot.drivewayAnchor.z,
+          lot.center.x,
+          lot.center.z,
+        );
+        expect(
+          drivewayDistance,
+          `${tree.id} enters the ${lot.id} driveway reservation`,
+        ).toBeGreaterThanOrEqual(6);
+
+        if (lot.surface !== 'grass') {
+          expect(
+            pointFallsInsideRotatedRectangle(
+              tree.position.x,
+              tree.position.z,
+              lot.center.x,
+              lot.center.z,
+              lot.width,
+              lot.depth,
+              lot.rotationY,
+              4,
+            ),
+            `${tree.id} enters the ${lot.id} hardscape reservation`,
+          ).toBe(false);
+        }
       }
     }
   });

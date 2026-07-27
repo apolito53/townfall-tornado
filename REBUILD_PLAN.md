@@ -1,6 +1,7 @@
 # Townfall Tornado V2 Rebuild Plan
 
-Status: Milestones 0 and 1 complete; Milestone 2 is next
+Status: Milestones 0 and 1 complete; Milestone 2 is implemented as a visual
+review candidate and awaits approval before versioning
 
 ## Goal
 
@@ -219,16 +220,27 @@ Exit criteria:
 
 Purpose: prove the game can look right before procedural complexity returns.
 
-Build one deterministic suburban district with approximately 20 buildings, several roads, trees, fences, parked cars, and readable elevation.
+Status: candidate implemented 2026-07-26. See
+[the Milestone 2 candidate report](./docs/rebuild/MILESTONE_2_DIORAMA.md).
+Package `0.2.1`, tag `v0.2.1.0`, and milestone completion remain gated on
+visual approval.
+
+Build one deterministic Plains town edge with exactly 20 buildings, several
+roads, trees, fences, parked cars, utilities, and readable elevation.
 
 Work:
 
-- Create a continuous terrain surface sampled in world coordinates.
-- Build one authored road and lot layout rather than a repeated chunk cross.
-- Create instanced environment batches with a coherent material palette.
-- Implement the first `CameraRig` pass at low, default, and high perspectives.
-- Replace the old post-process grade with restrained exposure, fog, rain, and contrast controls.
-- Produce Cat 1, Cat 3, and Cat 5 visual states for review.
+- Create a continuous 3.2 km terrain surface sampled in world coordinates.
+- Build one authored S-collector, residential loop, service spur, and lot
+  layout rather than a repeated chunk cross.
+- Create component-level instanced environment batches with a deterministic
+  material atlas and coherent palette.
+- Implement category-specific `CameraRig` envelopes at low, default, and high
+  perspectives with terrain clearance.
+- Replace the old post-process grade with restrained tone mapping, sky,
+  lighting, fog, and bounded rain.
+- Produce Cat 1, Cat 3, and physically mile-wide Cat 5 visual states for review
+  in storm and clear-weather QA modes.
 
 Exit criteria:
 
@@ -412,12 +424,14 @@ Render verification should fail on:
 
 ## Immediate Execution Order
 
-Milestones 0 and 1 are complete. The next implementation pass is Milestone 2:
+Milestone 2 is at its review gate:
 
-1. Replace the flat coordinate field with one continuous authored terrain
-   surface.
-2. Establish the suburban road and lot composition.
-3. Add coherent instanced environment batches.
-4. Review Cat 1, Cat 3, and Cat 5 framing states at desktop and mobile sizes.
-5. Lock the visual north-star before procedural streaming or destruction
-   returns.
+1. Review the clear-weather terrain and town candidate on the `rebuild/v2`
+   Vercel preview.
+2. Review the storm Cat 1, Cat 3, and Cat 5 category matrix at desktop and
+   mobile sizes.
+3. Apply any bounded visual corrections that belong to the north-star diorama.
+4. After approval, bump the package to `0.2.1`, tag `v0.2.1.0`, and mark
+   Milestone 2 complete.
+5. Begin Milestone 3 with the final tornado, storm deck, and wall-cloud
+   renderer. Do not pull destruction or procedural streaming forward.
