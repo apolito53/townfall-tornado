@@ -78,7 +78,7 @@ body {
   display: block;
   margin-top: 2px;
   color: #fff6d2;
-  font-size: clamp(2.2rem, 10vw, 4.4rem);
+  font-size: 4rem;
   line-height: 0.92;
 }
 
@@ -120,7 +120,7 @@ body {
   display: block;
   margin-top: 6px;
   color: #fff6d2;
-  font-size: clamp(1.12rem, 4vw, 1.55rem);
+  font-size: 1.35rem;
   line-height: 1;
 }
 
@@ -687,6 +687,10 @@ body {
 }
 
 @media (max-width: 720px) {
+  .start-screen__header strong {
+    font-size: 2.9rem;
+  }
+
   .hud {
     left: 10px;
     bottom: 10px;
@@ -774,7 +778,7 @@ body {
   }
 
   .quality-slider {
-    grid-template-columns: 52px minmax(0, 1fr) 40px;
+    grid-template-columns: 64px minmax(0, 1fr) 40px;
   }
 
   #diagnostics {

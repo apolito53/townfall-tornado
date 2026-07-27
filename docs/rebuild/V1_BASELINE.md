@@ -16,7 +16,9 @@ npm.cmd run baseline:v1
 
 The command starts the Vite server on `127.0.0.1:5175` when needed, launches a
 supported local Chromium browser, captures desktop High and mobile Low cases,
-and rewrites `docs/rebuild/baseline/v1/`.
+and rewrites `docs/rebuild/baseline/v1/`. On the v2 branch it boots the frozen
+prototype through the local-only `legacy-v1.html` entrypoint, so the active
+`GameApp` runtime remains isolated.
 
 The structured source of truth is
 [metrics.json](./baseline/v1/metrics.json). Headless-browser FPS is useful for

@@ -4,11 +4,14 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createServer } from 'vite';
 
-const DEFAULT_URL = 'http://127.0.0.1:5175/';
-const targetUrl = process.env.TOWNFALL_URL ?? DEFAULT_URL;
+const DEFAULT_URL = 'http://127.0.0.1:5175/legacy-v1.html';
+const targetUrl = process.env.TOWNFALL_V1_URL ?? DEFAULT_URL;
 const projectRoot = resolve('.');
 const label = readArgument('--label') ?? 'current';
-const outputDirectory = resolve('docs', 'rebuild', 'baseline', label);
+const outputRoot = process.env.TOWNFALL_BASELINE_ROOT
+  ? resolve(process.env.TOWNFALL_BASELINE_ROOT)
+  : resolve('docs', 'rebuild', 'baseline');
+const outputDirectory = resolve(outputRoot, label);
 const metricsPath = resolve(outputDirectory, 'metrics.json');
 const stressMass = 12000;
 const categoryCases = [

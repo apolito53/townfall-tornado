@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>Townfall Tornado V1 Baseline</title>
+  </head>
+  <body>
+    <main id="app" aria-label="Townfall Tornado v1 baseline">
+      <canvas id="game-canvas" aria-label="Townfall Tornado game canvas"></canvas>
+
+      <section id="start-screen" class="start-screen" aria-label="Mode select">
+        <div class="start-screen__panel">
+          <div class="start-screen__header">
+            <span>Townfall</span>
+            <strong>Tornado</strong>
+          </div>
+          <div class="mode-grid" aria-label="Choose mode">
+            <button id="levels-mode-button" class="mode-button" type="button">
+              <span>Levels</span>
+              <strong>Objective Run</strong>
+            </button>
+            <button id="endless-mode-button" class="mode-button" type="button">
+              <span>Endless</span>
+              <strong>Free Roam</strong>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="level-tracker" aria-label="Level objective">
+        <div class="level-tracker__header">
+          <span id="level-label">Level 1 / 5</span>
+          <strong id="level-name">First Touchdown</strong>
+        </div>
+        <div class="level-tracker__objective">
+          <span id="objective-label"></span>
+          <div class="level-tracker__bar" aria-hidden="true">
+            <div id="level-progress-bar" class="level-tracker__fill"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="hud" aria-label="Storm readout">
+        <div class="hud-panel hud-panel--primary">
+          <span>Storm</span>
+          <strong id="category-label">CAT 1</strong>
+        </div>
+        <div class="hud-panel">
+          <span>Mass</span>
+          <strong id="mass-label">0</strong>
+        </div>
+        <div class="hud-panel">
+          <span>Score</span>
+          <strong id="score-label">0</strong>
+        </div>
+        <div class="hud-panel">
+          <span>Town</span>
+          <strong id="damage-label">0%</strong>
+        </div>
+        <div class="hud-panel hud-panel--timer">
+          <span>Time</span>
+          <strong id="time-label">3:00</strong>
+        </div>
+      </section>
+
+      <section class="storm-meter" aria-label="Storm strength">
+        <div class="storm-meter__bar">
+          <div id="growth-bar" class="storm-meter__fill"></div>
+        </div>
+        <div id="storm-message" class="storm-message" role="status"></div>
+      </section>
+
+      <div id="mobile-joystick" class="mobile-joystick" hidden aria-hidden="true">
+        <div class="mobile-joystick__base">
+          <div class="mobile-joystick__knob"></div>
+        </div>
+      </div>
+
+      <button id="pause-button" class="pause-button" type="button">Pause</button>
+
+      <section id="pause-menu" class="pause-menu" hidden aria-hidden="true">
+        <div class="pause-menu__panel">
+          <div class="pause-menu__header">
+            <span>Paused</span>
+            <strong>Storm Control</strong>
+          </div>
+          <label class="setting-row" for="perspective-slider">
+            <span>Perspective</span>
+            <input id="perspective-slider" type="range" min="0" max="100" value="35" />
+            <small>Low / High</small>
+          </label>
+          <div class="pause-menu__actions">
+            <button id="resume-button" type="button">Resume</button>
+            <button id="retry-level-button" type="button">Retry Level</button>
+            <button id="restart-button" type="button">Restart Run</button>
+            <button id="mode-select-button" type="button">Mode Select</button>
+          </div>
+        </div>
+      </section>
+
+      <div id="diagnostics" hidden aria-hidden="true"></div>
+    </main>
+
+    <script type="module" src="/src/legacy/v1/main.ts"></script>
+  </body>
+</html>

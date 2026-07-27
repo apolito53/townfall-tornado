@@ -1,68 +1,108 @@
 # Townfall Tornado Codebase Index
 
-## Stack
+## Current State
 
-- Vite app with Three.js.
-- Public Vercel deployment: `https://townfall-tornado.vercel.app/`.
-- V2 branch preview: `https://townfall-tornado-git-rebuild-v2-anthony-polito-s-projects.vercel.app/`.
-- V2 rebuild roadmap: `REBUILD_PLAN.md`.
-- Locked v1 screenshots, metrics, findings, and v2 comparison gates: `docs/rebuild/V1_BASELINE.md`.
-- Entry point: `src/main.ts`.
-- Runtime surface: full-window WebGL canvas plus lightweight HTML HUD.
-- Build config: `vite.config.js` keeps the expected Three.js bundle warning quiet and pins strict local ports.
-- Dedicated ports: Vite server `5175`, reserved logging/debug receiver `5176`, preview `4175`.
+- Active branch: `rebuild/v2`.
+- Current milestone: Milestone 1 strict foundation complete.
+- Public v1 production: `https://townfall-tornado.vercel.app/`.
+- V2 branch preview:
+  `https://townfall-tornado-git-rebuild-v2-anthony-polito-s-projects.vercel.app/`.
+- Rebuild roadmap: `REBUILD_PLAN.md`.
+- Milestone 1 report: `docs/rebuild/MILESTONE_1_FOUNDATION.md`.
+- V1 comparison report: `docs/rebuild/V1_BASELINE.md`.
+- Runtime entrypoint: `src/main.ts`.
+- Dedicated ports: Vite `5175`, debug logs `5176`, preview `4175`.
 
-## Main Files
+## Active Runtime
 
-- `src/game.ts` owns scene setup, renderer, post-processing composer, persisted auto/preset/custom quality controls, pause state, perspective slider state, level progression, category-scaled objective targets, minimum level duration pacing, queued absorption rewards, category-scaled lower oblique camera follow with adaptive fog, loop timing, score, timer, capped scene debris bursts, capped render quality, shadow refresh scheduling, `F3` debug overlay state, and performance/render diagnostics.
-- `src/categoryProgression.ts` owns the very steep log-spaced tornado category mass requirements shared by gameplay and the HUD growth meter.
-- `src/debugLogger.ts` connects to the optional local debug receiver after `?debugLogs`/`localStorage` opt-in and streams console warnings/errors, uncaught errors, frame hitches, and town simulation pressure breadcrumbs when it is running.
-- `src/debrisParticles.ts` owns the pooled GPU debris layer: shader-driven dust/fleck particles plus strict-capacity instanced chunk debris and quality-scaled emission density.
-- `src/platformQuality.ts` probes browser/WebGL renderer details, hardware concurrency, memory hints, DPR, and mobile signals to choose the `Auto` quality recommendation.
-- `src/stormAtmosphereShader.ts` owns the full-screen storm grading shader for humid haze, dark cloud shadowing, rain streaks, grain, vignette, and lightning wash.
-- `src/townInstancing.ts` owns the instanced far-town proxy renderer for simple house/shop/office LODs, trees, fences, cars, and road stripes, including proxy visibility scaling used by distance phase-in.
-- `src/tornado.ts` owns tornado growth stats, category thresholds, dramatic diameter scaling, taller wiggly sky-connected funnel visuals, procedural smoky funnel/storm-sky textures, wall cloud curtains, dust, and airborne debris.
-- `src/town.ts` owns terrain, roads, a large low-cost base ground plane, more detailed low-poly building/office models, destructible town props, staged structural damage, pressure bursts, rotating per-frame simulation budgets, frame-budgeted debris particle/chunk emissions, persistent capped ground scars, height-shaded terrain-profiled procedural town chunks, placement reservations for roads/intersections/center-town overlap, continuous 5x5 chunk loading around the tornado, spatial buckets for nearby destructible simulation, quality-scaled full-model promotion near storm interaction, phase-blended distance render LOD, lift thresholds, suction response, and destroyed ratio.
-- `src/input.ts` translates keyboard, desktop pointer-drag, and mobile on-screen joystick steering into a normalized movement vector. Add `?mobileControls` or `?noMobileControls` locally to force a control mode during browser testing.
-- `src/ui.ts` updates the level tracker, HUD, growth bar, timer, and short storm messages.
-- `src/globals.d.ts` declares local browser diagnostics hooks used by the smoke tests.
-- `scripts/debug-log-server.mjs` runs the optional `127.0.0.1:5176` JSONL log receiver and exposes `/health`, `/log`, and `/recent` for live debugging.
-- `scripts/capture-rebuild-baseline.mjs` starts Vite when needed and captures reproducible desktop/mobile Cat 1, Cat 3, Cat 5, and oversized stress metrics under `docs/rebuild/baseline/`.
-- `scripts/verify-render.mjs` runs a Playwright smoke test against a live dev server, saves screenshots, and verifies high-category radius/camera scaling, level UI, minimum-duration level pacing, level advancement, active post-processing diagnostics, capped pixel ratio, capped debris/effects, render LOD, terrain-profile variation, generated prop placement, and town simulation culling through the local `window.__townfallGame` hook.
+- `src/main.ts` creates the logger and the single `GameApp` composition root.
+- `src/app/GameApp.ts` owns renderer lifecycle, the animation loop, service
+  composition, resize, mode transitions, quality application, and diagnostics
+  publication.
+- `src/app/GameSession.ts` owns mode, phase, pause, elapsed time, travel,
+  objective progress, restart count, and deterministic session seed.
+- `src/app/gameModes.ts` defines the Levels and Endless foundation shells.
+- `src/core/types.ts` contains renderer-independent contracts for the storm,
+  world, buildings, destruction, quality, sessions, input, and diagnostics.
+- `src/core/clock.ts` provides the capped fixed 60 Hz simulation step.
+- `src/core/random.ts` provides deterministic seed hashing and random streams.
+- `src/core/math.ts` contains small shared numeric helpers.
+- `src/camera/CameraRig.ts` owns perspective preference, framing, follow
+  smoothing, resize, and camera diagnostics.
+- `src/input/InputController.ts` normalizes keyboard, pointer, and mobile
+  joystick input into one plain movement command.
+- `src/quality/platformQuality.ts` reads browser, WebGL, CPU, memory, DPR, and
+  mobile hints.
+- `src/quality/QualityManager.ts` owns Auto/preset/custom quality state,
+  sanitization, persistence, and synchronized control values.
+- `src/diagnostics/Diagnostics.ts` separates warmup from gameplay timings and
+  owns the F3 overlay plus the browser test snapshot.
+- `src/diagnostics/debugLogger.ts` owns optional local JSONL browser logging.
+- `src/render/FoundationWorld.ts` owns the flat coordinate field, two reference
+  roads, instanced markers, and the storm marker.
+- `src/render/StormMarker.ts` owns the small deterministic particle marker used
+  only for foundation movement testing.
+- `src/ui/Hud.ts` projects session state into the HUD and objective tracker.
+- `src/ui/menus.ts` binds mode, pause, restart, perspective, and quality
+  controls through narrow action callbacks.
+- `src/ui/dom.ts` provides strict required-element lookup.
+- `src/styles.css` owns the shared full-screen, menu, HUD, mobile, pause, and
+  diagnostics presentation.
+
+## Preserved V1
+
+- `src/legacy/v1/` contains the complete prototype source and is excluded from
+  strict compilation.
+- `legacy-v1.html` is a local-only baseline capture entrypoint.
+- The active `src/main.ts` does not import the v1 `Game`, `Town`, or `Tornado`.
+- Tag `v0.1.0.0` remains the historical prototype boundary.
+
+## Scripts
+
+- `scripts/verify-foundation-architecture.mjs` rejects legacy imports, explicit
+  `any` escapes, disabled strict mode, or missing core contracts.
+- `scripts/verify-render.mjs` runs desktop and mobile browser smoke tests,
+  captures ignored menu/play screenshots, and checks lifecycle, normalized
+  input, pause/restart, modes, quality, perspective, diagnostics scrolling,
+  steady-state timing, canvas output, and resource budgets.
+- `scripts/capture-rebuild-baseline.mjs` captures the v1 reference through
+  `legacy-v1.html` and writes under `docs/rebuild/baseline/`.
+- `scripts/debug-log-server.mjs` runs the optional port 5176 JSONL receiver.
 
 ## Common Change Targets
 
-- Adjust tornado progression in `src/categoryProgression.ts`; adjust tornado feel in `src/tornado.ts`: diameter `radius`, `pullRadius`, `liftLimit`, `speed`, `pullStrength`, smoky funnel texture, and stacked funnel-section wobble.
-- Add or tune destructible object types and building detail in `src/town.ts`: creation helpers plus `massRequired`, `points`, `growth`, `radius`, staged damage roles, level density, loaded chunk radius, world base ground size, spatial simulation cell size, render LOD radii, terrain profile weights, road/intersection placement reservations, and procedural chunk placement.
-- Tune far-town proxy capacities, simple LOD shapes, proxy phase-in scaling, and instanced road stripe behavior in `src/townInstancing.ts`.
-- Change levels, category-scaled score/damage targets, queued absorption pacing, timer, combo, pause behavior, quality presets/manual sliders, camera angle/zoom/fog composition, post-processing setup, scene debris caps, minimum level duration, or diagnostics in `src/game.ts`.
-- Tune visual debris capacity, shader motion, particle colors, and instanced chunk behavior in `src/debrisParticles.ts`.
-- Tune screen-space storm realism in `src/stormAtmosphereShader.ts`: color grade, haze, rain streaks, vignette, grain, and lightning response.
-- Change visual layout, responsive HUD behavior, and mobile joystick placement in `src/styles.css`.
-- Level tracker, quality controls, mobile joystick, pause menu, and hidden diagnostics root markup live in `index.html`, with compact HUD, level tracker, quality controls, mobile controls, pause overlay, and debug overlay styling in `src/styles.css`.
+- Change lifecycle or composition in `src/app/GameApp.ts`.
+- Change session semantics in `src/app/GameSession.ts` or
+  `src/app/gameModes.ts`.
+- Change movement normalization or mobile detection in
+  `src/input/InputController.ts`.
+- Change camera framing in `src/camera/CameraRig.ts`.
+- Change presets or platform recommendation in `src/quality/`.
+- Change timing, budgets, or the F3 surface in
+  `src/diagnostics/Diagnostics.ts`.
+- Change the temporary test field in `src/render/FoundationWorld.ts`.
+- Change the temporary storm marker in `src/render/StormMarker.ts`.
+- Change HUD/menu projection in `src/ui/` and layout in `src/styles.css`.
 
-## Validation Commands
+## Validation
 
 ```powershell
-npm.cmd run build
 npm.cmd run typecheck
+npm.cmd run build
+npm.cmd run verify:architecture
 $env:TOWNFALL_URL='http://127.0.0.1:5175/'; npm.cmd run verify:render
 npm.cmd run baseline:v1
 ```
 
-`verify:render` expects the Vite dev server to be running on `http://127.0.0.1:5175/`.
-`npm.cmd run debug:logs` is optional during normal play; open the app with `?debugLogs` to opt the browser into appending events under ignored `logs/` JSONL files.
-
 ## Sharp Edges
 
-- Automated tests sample WebGL pixels from the main canvas, so `preserveDrawingBuffer` is enabled in `src/game.ts`; normal in-game diagnostics avoid recurring `readPixels` stalls.
-- `src/main.ts` exposes `window.__townfallGame` for local browser tuning and automated scaling checks.
-- Press `F3` or add `?debug` to the local URL to show the diagnostics overlay; it reuses `#diagnostics` while preserving the dataset fields used by smoke tests.
-- Mobile controls are auto-enabled from user-agent/touch/coarse-pointer signals, with `?mobileControls` and `?noMobileControls` overrides for local verification.
-- Run `npm.cmd run debug:logs` beside the Vite server, then open the app with `?debugLogs`, to capture browser-side warnings/errors, uncaught errors, frame hitches, and town simulation pressure events as JSONL on port `5176`.
-- Category mass targets are shared from `src/categoryProgression.ts`; keep the HUD and `src/tornado.ts` using that source instead of duplicating thresholds. Current gates are intentionally steep: Cat 2 at 55, Cat 3 at 250, Cat 4 at 943, Cat 5 at 3404.
-- The game renders through `EffectComposer`; resize, manually reset renderer info, on-change shadow refreshes, and shader diagnostics are wired from `src/game.ts`.
-- This first prototype uses simple custom suction and structural-stress physics rather than a full rigid-body engine.
-- Tiny debris particles are visual only and intentionally have no collision; they are GPU-shader points and pooled instanced chunks so long Cat 4/Cat 5 runs do not create thousands of short-lived scene objects.
-- Procedural town chunks are generated around the tornado's current chunk and stay loaded; distant houses/shops/trees/fences/cars/road stripes render through fog-aware instanced proxy materials, while full destructible models are promoted inside the interaction/detail bubble. The proxy/detail handoff uses a quality-scaled overlap band and far proxy fade so Low/Auto modes degrade gradually instead of popping black silhouettes. Full chunk unloading is still the next big lever if long runs get dense.
-- Large storms can have more destructible candidates than the per-frame budget can process; `src/town.ts` caps active carryover work so fresh nearby candidates continue receiving interaction updates instead of being starved by already-damaged items.
+- `preserveDrawingBuffer` remains enabled so browser smoke tests can sample the
+  WebGL canvas. Revisit this after a replacement screenshot strategy exists.
+- Browser comparison FPS is meaningful only on the same machine and browser.
+- The foundation quality profile stores Bloom, but no post-processing owner
+  exists yet.
+- The active Levels mode is a lifecycle/objective shell, not a completed level.
+- The flat world and particle marker are disposable scaffolding for Milestone
+  2, not visual targets.
+- V1 baseline capture intentionally compiles excluded legacy TypeScript through
+  Vite's transpiler; the strict active compiler never imports it.

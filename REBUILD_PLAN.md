@@ -1,6 +1,6 @@
 # Townfall Tornado V2 Rebuild Plan
 
-Status: Milestone 0 complete; Milestone 1 is next
+Status: Milestones 0 and 1 complete; Milestone 2 is next
 
 ## Goal
 
@@ -196,6 +196,9 @@ Exit criteria:
 ### Milestone 1: Strict Foundation And Empty Playfield
 
 Purpose: establish clean ownership before rebuilding visible systems.
+
+Status: completed 2026-07-26. See
+[the Milestone 1 foundation report](./docs/rebuild/MILESTONE_1_FOUNDATION.md).
 
 Work:
 
@@ -409,13 +412,12 @@ Render verification should fail on:
 
 ## Immediate Execution Order
 
-The first implementation pass should stop after Milestone 1:
+Milestones 0 and 1 are complete. The next implementation pass is Milestone 2:
 
-1. Tag and branch.
-2. Add baseline captures and metric reporting.
-3. Establish the strict typed runtime shell.
-4. Port input, quality, logging, and diagnostics.
-5. Boot a flat empty playfield with a movable storm marker.
-6. Validate and deploy the first v2 preview.
-
-Only then begin the visual diorama. This gives the rebuild a clean spine while keeping the first coding pass small enough to review properly.
+1. Replace the flat coordinate field with one continuous authored terrain
+   surface.
+2. Establish the suburban road and lot composition.
+3. Add coherent instanced environment batches.
+4. Review Cat 1, Cat 3, and Cat 5 framing states at desktop and mobile sizes.
+5. Lock the visual north-star before procedural streaming or destruction
+   returns.
