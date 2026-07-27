@@ -1,6 +1,6 @@
 # Townfall Tornado V2 Rebuild Plan
 
-Status: approved direction, ready for implementation
+Status: Milestone 0 complete; Milestone 1 is next
 
 ## Goal
 
@@ -21,7 +21,8 @@ This is a controlled v2 rebuild, not a framework migration. TypeScript, Vite, Th
 The current `master` build remains the playable v1 prototype until v2 reaches its replacement gate.
 
 1. Tag commit `f5fca1d` as the v1 prototype baseline.
-2. Create a long-lived `rebuild/v2` branch from that tag.
+2. Create a long-lived `rebuild/v2` branch after the documentation-only roadmap
+   commit `b259ad6`; its inherited runtime still matches the baseline tag.
 3. Let Vercel create preview deployments from the rebuild branch.
 4. Keep production pointed at `master` until the vertical slice is approved.
 5. Merge v2 only after the replacement gate near the end of this plan passes.
@@ -174,6 +175,9 @@ After a 20-minute automated traversal:
 ### Milestone 0: Preserve And Measure V1
 
 Purpose: establish a safe baseline and make regression targets explicit.
+
+Status: completed 2026-07-26. See
+[the committed v1 baseline report](./docs/rebuild/V1_BASELINE.md).
 
 Work:
 
