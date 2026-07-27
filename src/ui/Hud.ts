@@ -1,5 +1,8 @@
-import type { SessionSnapshot } from '../core/types';
 import { getGameModeDefinition } from '../app/gameModes';
+import type {
+  ReviewStormCategory,
+  SessionSnapshot,
+} from '../core/types';
 import { requireElement } from './dom';
 
 function formatTime(seconds: number): string {
@@ -21,13 +24,18 @@ export class Hud {
   private readonly timeLabel = requireElement<HTMLElement>('#time-label');
   private readonly growthBar = requireElement<HTMLElement>('#growth-bar');
   private readonly stormMessage = requireElement<HTMLElement>('#storm-message');
+  private stormCategory: ReviewStormCategory = 1;
+
+  setStormCategory(category: ReviewStormCategory): void {
+    this.stormCategory = category;
+  }
 
   update(snapshot: SessionSnapshot): void {
     if (snapshot.mode === null) {
       this.levelLabel.textContent = 'Townfall';
       this.levelName.textContent = 'Tornado';
       this.objectiveLabel.textContent = '';
-      this.categoryLabel.textContent = 'CORE';
+      this.categoryLabel.textContent = `CAT ${this.stormCategory}`;
       this.modeLabel.textContent = '-';
       this.travelLabel.textContent = '0 m';
       this.stateLabel.textContent = 'IDLE';
@@ -42,12 +50,12 @@ export class Hud {
     const distance = Math.floor(snapshot.distanceTraveled);
     this.levelLabel.textContent = definition.eyebrow;
     this.levelName.textContent = definition.title;
-    this.categoryLabel.textContent = 'CORE';
+    this.categoryLabel.textContent = `CAT ${this.stormCategory}`;
     this.modeLabel.textContent = snapshot.mode === 'levels' ? 'LEVEL' : 'ROAM';
     this.travelLabel.textContent = `${distance.toLocaleString()} m`;
     this.stateLabel.textContent = snapshot.paused ? 'PAUSED' : 'ACTIVE';
     this.timeLabel.textContent = definition.durationSeconds === null
-      ? '∞'
+      ? 'INF'
       : formatTime(definition.durationSeconds - snapshot.elapsedSeconds);
 
     const progressPercent = Math.round(snapshot.objectiveProgress * 100);

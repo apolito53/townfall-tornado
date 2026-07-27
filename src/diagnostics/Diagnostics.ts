@@ -171,6 +171,8 @@ export class Diagnostics {
     dataset.mobileControls = String(diagnostics.mobileControlsEnabled);
     dataset.stormX = String(diagnostics.stormX);
     dataset.stormZ = String(diagnostics.stormZ);
+    dataset.category = String(diagnostics.stormCategory);
+    dataset.weather = diagnostics.weather;
 
     const now = performance.now();
     if (
@@ -231,6 +233,21 @@ export class Diagnostics {
         ['Steps / Dropped', `${diagnostics.simulationSteps} / ${diagnostics.droppedSimulationSteps}`],
         ['Seed', diagnostics.worldSeedLabel],
       ]),
+      this.createSection('Storm', [
+        ['Category / Diameter', `Cat ${diagnostics.stormCategory} / ${formatNumber(diagnostics.stormPhysicalDiameter)} m`],
+        ['Weather', diagnostics.weather],
+        ['Position', `${formatNumber(diagnostics.stormX)}, ${formatNumber(diagnostics.stormY)}, ${formatNumber(diagnostics.stormZ)}`],
+        ['GPU Batches', diagnostics.stormBatches.toLocaleString()],
+        ['Storm Particles', diagnostics.activeStormParticles.toLocaleString()],
+        ['Rain Particles', diagnostics.activeRainParticles.toLocaleString()],
+      ]),
+      this.createSection('World', [
+        ['District', diagnostics.districtSignature],
+        ['Terrain Range', `${formatNumber(diagnostics.terrainMinimum)} to ${formatNumber(diagnostics.terrainMaximum)} m`],
+        ['Buildings / Props', `${diagnostics.buildingCount} / ${diagnostics.propCount}`],
+        ['Instance Batches', diagnostics.instanceBatches.toLocaleString()],
+        ['Active Instances', diagnostics.activeInstances.toLocaleString()],
+      ]),
       this.createSection('Render', [
         ['Draw Calls', diagnostics.drawCalls.toLocaleString()],
         ['Triangles', diagnostics.triangles.toLocaleString()],
@@ -251,6 +268,7 @@ export class Diagnostics {
         ['Perspective', formatNumber(diagnostics.perspectiveAmount, 2)],
         ['Camera Distance', formatNumber(diagnostics.cameraDistance)],
         ['Camera Height', formatNumber(diagnostics.cameraHeight)],
+        ['Camera Clearance', `${formatNumber(diagnostics.cameraClearance)} m / ${diagnostics.cameraClearanceSamples} samples`],
       ]),
     );
 

@@ -267,6 +267,7 @@ function createMaterial(
     emissive?: THREE.ColorRepresentation;
     emissiveIntensity?: number;
     flatShading?: boolean;
+    vertexColors?: boolean;
   } = {},
 ): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
@@ -279,7 +280,7 @@ function createMaterial(
     emissive: options.emissive ?? 0x000000,
     emissiveIntensity: options.emissiveIntensity ?? 0,
     flatShading: options.flatShading ?? false,
-    vertexColors: true,
+    vertexColors: options.vertexColors ?? false,
   });
 }
 
@@ -300,6 +301,7 @@ export class MaterialAtlas {
     this.materials = {
       terrain: createMaterial(this.texture, 0xffffff, 0.98, {
         flatShading: true,
+        vertexColors: true,
       }),
       asphalt: createMaterial(this.texture, 0xffffff, 0.94),
       concrete: createMaterial(this.texture, 0xffffff, 0.9),

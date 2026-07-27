@@ -651,10 +651,51 @@ function distanceToBuilding(
   return Math.hypot(outsideX, outsideZ);
 }
 
+function distanceToSegment(
+  x: number,
+  z: number,
+  startX: number,
+  startZ: number,
+  endX: number,
+  endZ: number,
+): number {
+  const segmentX = endX - startX;
+  const segmentZ = endZ - startZ;
+  const lengthSquared = segmentX * segmentX + segmentZ * segmentZ;
+  const amount = lengthSquared === 0
+    ? 0
+    : Math.max(0, Math.min(
+      1,
+      ((x - startX) * segmentX + (z - startZ) * segmentZ)
+      / lengthSquared,
+    ));
+  return Math.hypot(
+    x - (startX + segmentX * amount),
+    z - (startZ + segmentZ * amount),
+  );
+}
+
+function isInsideLot(
+  x: number,
+  z: number,
+  lot: LotDefinition,
+  margin: number,
+): boolean {
+  const offsetX = x - lot.center.x;
+  const offsetZ = z - lot.center.z;
+  const cosine = Math.cos(-lot.rotationY);
+  const sine = Math.sin(-lot.rotationY);
+  const localX = offsetX * cosine - offsetZ * sine;
+  const localZ = offsetX * sine + offsetZ * cosine;
+  return Math.abs(localX) <= lot.width * 0.5 + margin
+    && Math.abs(localZ) <= lot.depth * 0.5 + margin;
+}
+
 function isOpenLandscapePoint(
   x: number,
   z: number,
   buildings: readonly BuildingRecord[],
+  lots: readonly LotDefinition[],
 ): boolean {
   for (const road of ROADS) {
     const projection = projectToRoad(x, z, road);
@@ -663,22 +704,44 @@ function isOpenLandscapePoint(
     }
   }
 
-  return buildings.every(
+  const clearsBuildings = buildings.every(
     (building) => distanceToBuilding(x, z, building) > 14,
   );
+  if (!clearsBuildings) {
+    return false;
+  }
+
+  for (const lot of lots) {
+    const drivewayDistance = distanceToSegment(
+      x,
+      z,
+      lot.drivewayAnchor.x,
+      lot.drivewayAnchor.z,
+      lot.center.x,
+      lot.center.z,
+    );
+    if (drivewayDistance < 6) {
+      return false;
+    }
+    if (lot.surface !== 'grass' && isInsideLot(x, z, lot, 4)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function createTrees(
   terrain: TerrainField,
   buildings: readonly BuildingRecord[],
+  lots: readonly LotDefinition[],
   random: SeededRandom,
 ): WorldItemRecord[] {
   const zones = [
-    { minX: -1450, maxX: -850, minZ: 550, maxZ: 1450 },
-    { minX: 720, maxX: 1480, minZ: 220, maxZ: 1180 },
-    { minX: -1400, maxX: -760, minZ: -1350, maxZ: -480 },
-    { minX: 760, maxX: 1450, minZ: -520, maxZ: 120 },
-    { minX: -720, maxX: 720, minZ: -1480, maxZ: -980 },
+    { minX: -980, maxX: -430, minZ: 400, maxZ: 1120 },
+    { minX: 430, maxX: 980, minZ: 180, maxZ: 920 },
+    { minX: -720, maxX: 720, minZ: 120, maxZ: 680 },
+    { minX: -820, maxX: 820, minZ: -620, maxZ: 100 },
+    { minX: -1050, maxX: 1050, minZ: -1240, maxZ: -660 },
   ];
   const trees: WorldItemRecord[] = [];
   let attempts = 0;
@@ -688,7 +751,7 @@ function createTrees(
     const zone = random.pick(zones);
     const x = random.range(zone.minX, zone.maxX);
     const z = random.range(zone.minZ, zone.maxZ);
-    if (!isOpenLandscapePoint(x, z, buildings)) {
+    if (!isOpenLandscapePoint(x, z, buildings, lots)) {
       continue;
     }
 
@@ -1001,7 +1064,7 @@ export function createNorthStarDistrict(
     createBuildingRecord(plan, index, terrain, random)
   );
   const props = [
-    ...createTrees(terrain, buildings, random),
+    ...createTrees(terrain, buildings, lots, random),
     ...createCars(terrain, lots),
     ...createFences(terrain),
     ...createUtilityPoles(terrain),
@@ -1017,7 +1080,7 @@ export function createNorthStarDistrict(
       type: 'suburb',
     },
     bounds: { ...WORLD_BOUNDS },
-    spawn: position(0, terrain.sampleHeight(0, 980), 980),
+    spawn: position(0, terrain.sampleHeight(0, 520), 520),
     roads: ROADS,
     lots,
     buildings,

@@ -12,7 +12,7 @@ export const GAME_MODE_DEFINITIONS: Record<GameMode, GameModeDefinition> = {
   levels: {
     id: 'levels',
     eyebrow: 'Level 1 / 1',
-    title: 'Foundation Run',
+    title: 'Valley Approach',
     objectiveDistance: 250,
     durationSeconds: 180,
   },

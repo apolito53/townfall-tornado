@@ -1,12 +1,11 @@
 import * as THREE from 'three';
 import { CameraRig } from '../camera/CameraRig';
 import { FixedStepClock, type ClockFrame } from '../core/clock';
-import { clamp, roundTo } from '../core/math';
+import { roundTo } from '../core/math';
 import type {
   GameMode,
   MovementCommand,
   RuntimeDiagnostics,
-  StormProfile,
 } from '../core/types';
 import {
   Diagnostics,
@@ -20,18 +19,16 @@ import {
   QualityManager,
   type QualityState,
 } from '../quality/QualityManager';
-import { FoundationWorld } from '../render/FoundationWorld';
+import { DioramaWorld } from '../render/DioramaWorld';
+import {
+  getStormReviewProfile,
+  type StormReviewProfile,
+} from '../storm/stormProfiles';
+import { TornadoSystem } from '../storm/TornadoSystem';
 import { Hud } from '../ui/Hud';
 import { Menus } from '../ui/menus';
 import { GameSession } from './GameSession';
-
-const FOUNDATION_STORM_PROFILE: StormProfile = {
-  category: 0,
-  radius: 3.7,
-  influenceRadius: 8,
-  movementSpeed: 18,
-  condensationDensity: 0.5,
-};
+import { parseReviewSettings } from './reviewSettings';
 
 const IDLE_COMMAND: MovementCommand = {
   x: 0,
@@ -61,16 +58,23 @@ interface SceneCounts {
 }
 
 export class GameApp {
-  readonly runtime = 'v2-foundation' as const;
+  readonly runtime = 'v2-diorama' as const;
   readonly qualityManager: QualityManager;
   private readonly canvas: HTMLCanvasElement;
   private readonly logger: DebugLogger;
   private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
-  private readonly camera = new THREE.PerspectiveCamera(58, 1, 0.1, 900);
-  private readonly sun = new THREE.DirectionalLight(0xfff0d2, 2.2);
-  private readonly world = new FoundationWorld();
-  private readonly cameraRig = new CameraRig(this.camera);
+  private readonly camera = new THREE.PerspectiveCamera(58, 1, 1, 6000);
+  private readonly reviewSettings = parseReviewSettings(window.location.search);
+  private readonly stormProfile: StormReviewProfile = getStormReviewProfile(
+    this.reviewSettings.category,
+  );
+  private readonly world = new DioramaWorld(this.reviewSettings.weather);
+  private readonly tornadoSystem = new TornadoSystem(
+    this.stormProfile,
+    this.world.spawn,
+  );
+  private readonly cameraRig = new CameraRig(this.camera, this.world.terrain);
   private readonly session = new GameSession();
   private readonly clock = new FixedStepClock();
   private readonly input: InputController;
@@ -93,7 +97,7 @@ export class GameApp {
 
     this.renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: true,
+      antialias: initialQuality.effectiveKey !== 'low',
       powerPreference: 'high-performance',
       preserveDrawingBuffer: true,
     });
@@ -103,10 +107,11 @@ export class GameApp {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.setPixelRatio(this.resolvePixelRatio(initialQuality));
 
-    this.scene.background = new THREE.Color(0x839696);
-    this.scene.fog = new THREE.Fog(0x839696, 95, 390);
-    this.createLights();
+    this.scene.background = new THREE.Color(0x66787a);
+    this.scene.fog = this.world.fog;
     this.scene.add(this.world.object);
+    this.cameraRig.setCategory(this.reviewSettings.category);
+    this.hud.setStormCategory(this.reviewSettings.category);
 
     const joystickElement = document.querySelector<HTMLElement>('#mobile-joystick');
     this.input = new InputController(this.canvas, { joystickElement });
@@ -147,8 +152,16 @@ export class GameApp {
 
     window.addEventListener('resize', this.handleResize);
     this.handleResize();
-    this.world.reset();
-    this.cameraRig.reset(this.world.storm.object.position);
+    const initialStorm = this.tornadoSystem.snapshot();
+    this.cameraRig.reset(initialStorm.position);
+    this.world.reset(initialStorm, this.stormProfile);
+    this.world.update(
+      0,
+      0,
+      initialStorm,
+      this.stormProfile,
+      this.camera.position,
+    );
     this.showStartScreen();
   }
 
@@ -265,10 +278,17 @@ export class GameApp {
       },
     );
     this.droppedSimulationSteps += this.lastClockFrame.droppedSimulationSteps;
-    this.world.update(timestampMs / 1000, this.lastCommand);
+    const stormSnapshot = this.tornadoSystem.snapshot();
     this.cameraRig.update(
-      this.world.storm.object.position,
+      stormSnapshot.position,
       this.lastClockFrame.frameSeconds,
+    );
+    this.world.update(
+      timestampMs / 1000,
+      this.lastClockFrame.frameSeconds,
+      stormSnapshot,
+      this.stormProfile,
+      this.camera.position,
     );
     this.renderer.render(this.scene, this.camera);
     this.renderOk = this.canvas.width > 0
@@ -289,39 +309,35 @@ export class GameApp {
   };
 
   private simulate(stepSeconds: number): void {
-    const previousX = this.world.storm.object.position.x;
-    const previousZ = this.world.storm.object.position.z;
-    const boundary = this.world.movementBoundary;
-    const nextX = clamp(
-      previousX
-        + this.lastCommand.x
-        * FOUNDATION_STORM_PROFILE.movementSpeed
-        * stepSeconds,
-      -boundary,
-      boundary,
-    );
-    const nextZ = clamp(
-      previousZ
-        + this.lastCommand.y
-        * FOUNDATION_STORM_PROFILE.movementSpeed
-        * stepSeconds,
-      -boundary,
-      boundary,
-    );
-    this.world.storm.setPosition(nextX, nextZ);
+    const previous = this.tornadoSystem.snapshot().position;
+    const next = this.tornadoSystem.simulate({
+      stepSeconds,
+      command: this.lastCommand,
+      terrain: this.world.terrain,
+      bounds: this.world.movementBounds,
+    }).position;
     this.session.update(
       stepSeconds,
-      Math.hypot(nextX - previousX, nextZ - previousZ),
+      Math.hypot(next.x - previous.x, next.z - previous.z),
     );
   }
 
   private resetPlayfield(): void {
-    this.world.reset();
+    this.tornadoSystem.reset(this.world.spawn);
     this.clock.reset();
     this.lastCommand = IDLE_COMMAND;
     this.lastClockFrame = EMPTY_CLOCK_FRAME;
     this.droppedSimulationSteps = 0;
-    this.cameraRig.reset(this.world.storm.object.position);
+    const stormSnapshot = this.tornadoSystem.snapshot();
+    this.cameraRig.reset(stormSnapshot.position);
+    this.world.reset(stormSnapshot, this.stormProfile);
+    this.world.update(
+      0,
+      0,
+      stormSnapshot,
+      this.stormProfile,
+      this.camera.position,
+    );
   }
 
   private syncPhase(): void {
@@ -332,30 +348,12 @@ export class GameApp {
     this.menus.setPhase(snapshot.phase, snapshot.mode);
   }
 
-  private createLights(): void {
-    const hemisphere = new THREE.HemisphereLight(0xd9e1e0, 0x394b3c, 2.1);
-    hemisphere.name = 'FoundationHemisphereLight';
-    this.scene.add(hemisphere);
-
-    this.sun.name = 'FoundationSun';
-    this.sun.position.set(-70, 110, 55);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(1024, 1024);
-    this.sun.shadow.camera.left = -70;
-    this.sun.shadow.camera.right = 70;
-    this.sun.shadow.camera.top = 70;
-    this.sun.shadow.camera.bottom = -70;
-    this.sun.shadow.camera.near = 10;
-    this.sun.shadow.camera.far = 240;
-    this.scene.add(this.sun);
-  }
-
   private applyQuality(state: QualityState): void {
     const profile = state.profile;
-    this.renderer.setPixelRatio(this.resolvePixelRatio(state));
+    const pixelRatio = this.resolvePixelRatio(state);
+    this.renderer.setPixelRatio(pixelRatio);
     this.renderer.shadowMap.enabled = profile.shadows;
-    this.sun.castShadow = profile.shadows;
-    this.world.setEffectsScale(profile.effectsScale);
+    this.world.applyQuality(profile, pixelRatio);
     this.handleResize();
     this.logger.log('debug', 'quality-changed', {
       mode: state.mode,
@@ -385,10 +383,14 @@ export class GameApp {
     const cameraDiagnostics = this.cameraRig.getDiagnostics();
     const qualityState = this.qualityManager.getState();
     const sceneCounts = this.collectSceneCounts();
-    const stormPosition = this.world.storm.object.position;
+    const stormPosition = this.tornadoSystem.snapshot().position;
+    const worldDiagnostics = this.world.getDiagnostics();
+    const stormDiagnostics = worldDiagnostics.storm;
+    const terrainRange = worldDiagnostics.terrain.elevationRange;
+    const atmosphereDiagnostics = worldDiagnostics.atmosphere;
 
     return {
-      schemaVersion: 2,
+      schemaVersion: 3,
       runtime: this.runtime,
       renderOk: this.renderOk,
       appPhase: sessionSnapshot.phase,
@@ -405,6 +407,21 @@ export class GameApp {
       stormX: roundTo(stormPosition.x),
       stormY: roundTo(stormPosition.y),
       stormZ: roundTo(stormPosition.z),
+      stormCategory: this.reviewSettings.category,
+      stormPhysicalDiameter: this.stormProfile.radius * 2,
+      weather: this.reviewSettings.weather,
+      districtSignature: worldDiagnostics.signature,
+      terrainMinimum: roundTo(terrainRange.minimum),
+      terrainMaximum: roundTo(terrainRange.maximum),
+      buildingCount: worldDiagnostics.buildingCount,
+      propCount: worldDiagnostics.propCount,
+      instanceBatches: worldDiagnostics.instanceBatches,
+      activeInstances: worldDiagnostics.activeInstances,
+      stormBatches: stormDiagnostics.batches,
+      activeStormParticles:
+        stormDiagnostics.activeCondensation
+        + stormDiagnostics.activeGroundDust,
+      activeRainParticles: atmosphereDiagnostics.activeRainParticles,
       inputSource: this.lastCommand.source,
       commandX: roundTo(this.lastCommand.x, 3),
       commandY: roundTo(this.lastCommand.y, 3),
@@ -418,6 +435,8 @@ export class GameApp {
       perspectiveAmount: roundTo(cameraDiagnostics.perspectiveAmount, 2),
       cameraDistance: roundTo(cameraDiagnostics.distance),
       cameraHeight: roundTo(cameraDiagnostics.height),
+      cameraClearance: roundTo(cameraDiagnostics.clearance),
+      cameraClearanceSamples: cameraDiagnostics.clearanceSamples,
       simulationHz: this.clock.simulationHz,
       simulationSteps: this.lastClockFrame.simulationSteps,
       droppedSimulationSteps: this.droppedSimulationSteps,

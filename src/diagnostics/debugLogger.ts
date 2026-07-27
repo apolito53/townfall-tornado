@@ -220,7 +220,7 @@ export function logRuntimeReady(
   logger: DebugLogger,
   diagnostics: RuntimeDiagnostics,
 ): void {
-  logger.log('info', 'v2-foundation-ready', {
+  logger.log('info', 'v2-diorama-ready', {
     quality: diagnostics.effectiveQuality,
     mobileControls: diagnostics.mobileControlsEnabled,
     rendererObjects: diagnostics.sceneObjects,

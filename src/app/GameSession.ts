@@ -26,7 +26,7 @@ export class GameSession {
     this.restartCount = 0;
     this.sessionId = this.nextSessionId;
     this.nextSessionId += 1;
-    this.seed = createWorldSeed(`townfall:v2:${mode}:foundation`);
+    this.seed = createWorldSeed(`townfall:v2:${mode}:diorama`);
     return this.snapshot();
   }
 

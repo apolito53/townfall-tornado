@@ -228,8 +228,8 @@ export interface SessionSnapshot {
 }
 
 export interface RuntimeDiagnostics {
-  schemaVersion: 2;
-  runtime: 'v2-foundation';
+  schemaVersion: 3;
+  runtime: 'v2-diorama';
   renderOk: boolean;
   appPhase: AppPhase;
   gameMode: GameMode | null;
@@ -245,6 +245,19 @@ export interface RuntimeDiagnostics {
   stormX: number;
   stormY: number;
   stormZ: number;
+  stormCategory: ReviewStormCategory;
+  stormPhysicalDiameter: number;
+  weather: WeatherMode;
+  districtSignature: string;
+  terrainMinimum: number;
+  terrainMaximum: number;
+  buildingCount: number;
+  propCount: number;
+  instanceBatches: number;
+  activeInstances: number;
+  stormBatches: number;
+  activeStormParticles: number;
+  activeRainParticles: number;
   inputSource: InputSource;
   commandX: number;
   commandY: number;
@@ -258,6 +271,8 @@ export interface RuntimeDiagnostics {
   perspectiveAmount: number;
   cameraDistance: number;
   cameraHeight: number;
+  cameraClearance: number;
+  cameraClearanceSamples: number;
   simulationHz: number;
   simulationSteps: number;
   droppedSimulationSteps: number;
