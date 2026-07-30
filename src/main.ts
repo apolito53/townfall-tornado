@@ -1,8 +1,10 @@
 import { Game } from './game';
 import { initDebugLogger } from './debugLogger';
+import { injectSpeedInsights } from '@vercel/speed-insights';
 import './styles.css';
 
 initDebugLogger();
+injectSpeedInsights();
 
 const game = new Game({
   canvas: document.querySelector('#game-canvas'),

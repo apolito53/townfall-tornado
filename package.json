@@ -11,6 +11,7 @@
     "verify:render": "node scripts/verify-render.mjs"
   },
   "dependencies": {
+    "@vercel/speed-insights": "^2.0.0",
     "three": "^0.181.2"
   },
   "devDependencies": {
